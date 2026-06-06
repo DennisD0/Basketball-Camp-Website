@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum MemberStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum SessionType {
+  PRACTICE
+  GAME
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+}
+
+enum FeeType {
+  MONTHLY
+  SEASONAL
+  PER_SESSION
+}
+
+model Member {
+  id             String       @id @default(cuid())
+  firstName      String       @map("first_name")
+  lastName       String       @map("last_name")
+  dateOfBirth    DateTime?    @map("date_of_birth")
+  teamAssignment String?      @map("team_assignment")
+  enrollmentDate DateTime     @default(now()) @map("enrollment_date")
+  status         MemberStatus @default(ACTIVE)
+  archivedAt     DateTime?    @map("archived_at")
+
+  guardianName  String? @map("guardian_name")
+  guardianEmail String? @map("guardian_email")
+  guardianPhone String? @map("guardian_phone")
+
+  attendance    Attendance[]
+  payments      Payment[]
+  notifications Notification[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("members")
+}
+
+model Session {
+  id    String      @id @default(cuid())
+  type  SessionType
+  date  DateTime
+  notes String?
+
+  attendance Attendance[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("sessions")
+}
+
+model Attendance {
+  id            String           @id @default(cuid())
+  memberId      String           @map("member_id")
+  sessionId     String           @map("session_id")
+  status        AttendanceStatus
+  absenceReason String?          @map("absence_reason")
+
+  member  Member  @relation(fields: [memberId], references: [id])
+  session Session @relation(fields: [sessionId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([memberId, sessionId])
+  @@map("attendance")
+}
+
+model Payment {
+  id       String        @id @default(cuid())
+  memberId String        @map("member_id")
+  amount   Decimal
+  method   PaymentMethod
+  date     DateTime
+  notes    String?
+
+  member Member @relation(fields: [memberId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("payments")
+}
+
+model FeeStructure {
+  id       String  @id @default(cuid())
+  name     String
+  type     FeeType
+  amount   Decimal
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("fee_structures")
+}
+
+model Notification {
+  id       String   @id @default(cuid())
+  memberId String   @map("member_id")
+  type     String
+  channel  String
+  content  String?
+  sentAt   DateTime @default(now()) @map("sent_at")
+
+  member Member @relation(fields: [memberId], references: [id])
+
+  @@map("notifications")
+}
+
+model Registration {
+  id              String   @id @default(cuid())
+  parentName      String   @map("parent_name")
+  parentPhone     String   @map("parent_phone")
+  whatsappConsent Boolean  @map("whatsapp_consent")
+  childName       String   @map("child_name")
+  programOption   String   @map("program_option")
+  sport           String
+  ageGroup        String   @map("age_group")
+  mediaConsent    Boolean  @map("media_consent")
+  injuryWaiver    Boolean  @map("injury_waiver")
+  noRefundAck     Boolean  @map("no_refund_ack")
+  status          String   @default("PENDING")
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("registrations")
+}
