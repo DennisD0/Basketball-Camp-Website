@@ -4,12 +4,12 @@ import prisma from '@/lib/prisma'
 export async function POST(req: NextRequest) {
   const body = await req.json()
   const {
-    parentName, parentPhone, whatsappConsent,
+    parentName, parentEmail, parentPhone, whatsappConsent,
     childName, programOption, sport, ageGroup,
     mediaConsent, injuryWaiver, noRefundAck,
   } = body
 
-  if (!parentName || !parentPhone || !childName || !programOption || !sport || !ageGroup) {
+  if (!parentName || !parentEmail || !parentPhone || !childName || !programOption || !sport || !ageGroup) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
   if (!injuryWaiver || !noRefundAck) {
@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
   const reg = await prisma.registration.create({
     data: {
       parentName,
+      parentEmail,
       parentPhone,
       whatsappConsent: !!whatsappConsent,
       childName,

@@ -1,7 +1,6 @@
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM   = '413 Youth Club <onboarding@resend.dev>'
+const FROM = '413 Youth Club <onboarding@resend.dev>'
 
 function wrap(guardianName: string, bodyText: string) {
   // Convert plain-text line breaks to HTML paragraphs
@@ -34,7 +33,7 @@ export async function sendComposedEmail({
     return { id: 'mock' }
   }
 
-  return resend.emails.send({
+  return new Resend(process.env.RESEND_API_KEY).emails.send({
     from: FROM,
     to,
     subject,

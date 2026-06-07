@@ -17,6 +17,7 @@ export default function RegistrationForm() {
   const [error, setError] = useState('')
   const [form, setForm] = useState({
     parentName:      '',
+    parentEmail:     '',
     parentPhone:     '',
     whatsappConsent: false,
     childName:       '',
@@ -84,6 +85,13 @@ export default function RegistrationForm() {
             <input
               type="text" required placeholder="Jane Smith"
               value={form.parentName} onChange={e => set('parentName', e.target.value)}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Email Address" required>
+            <input
+              type="email" required placeholder="jane@email.com"
+              value={form.parentEmail} onChange={e => set('parentEmail', e.target.value)}
               className={inputCls}
             />
           </Field>

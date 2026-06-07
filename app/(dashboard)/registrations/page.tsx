@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma'
 import RegistrationList from '@/components/registrations/registration-list'
+import AutoRefresh from '@/components/auto-refresh'
 
 export default async function RegistrationsPage() {
   const registrations = await prisma.registration.findMany({
@@ -10,6 +11,7 @@ export default async function RegistrationsPage() {
 
   return (
     <div className="space-y-6">
+      <AutoRefresh />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">Registrations</h1>

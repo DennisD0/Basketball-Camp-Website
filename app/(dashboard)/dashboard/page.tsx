@@ -8,6 +8,7 @@ import RevenueCard from '@/components/dashboard/revenue-card'
 import PaymentBreakdown from '@/components/dashboard/payment-breakdown'
 import RegistrationStats from '@/components/dashboard/registration-stats'
 import RevenueAreaChart from '@/components/dashboard/revenue-area-chart'
+import AutoRefresh from '@/components/auto-refresh'
 import Link from 'next/link'
 
 const IconPeople = () => (
@@ -103,6 +104,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <AutoRefresh />
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-brand-navy">Dashboard</h1>

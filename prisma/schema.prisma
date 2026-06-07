@@ -134,6 +134,7 @@ model Notification {
 model Registration {
   id              String   @id @default(cuid())
   parentName      String   @map("parent_name")
+  parentEmail     String?  @map("parent_email")
   parentPhone     String   @map("parent_phone")
   whatsappConsent Boolean  @map("whatsapp_consent")
   childName       String   @map("child_name")
