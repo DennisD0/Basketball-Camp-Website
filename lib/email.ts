@@ -1,5 +1,3 @@
-import { Resend } from 'resend'
-
 const FROM = '413 Youth Club <onboarding@resend.dev>'
 
 function wrap(guardianName: string, bodyText: string) {
@@ -33,6 +31,7 @@ export async function sendComposedEmail({
     return { id: 'mock' }
   }
 
+  const { Resend } = await import('resend')
   return new Resend(process.env.RESEND_API_KEY).emails.send({
     from: FROM,
     to,

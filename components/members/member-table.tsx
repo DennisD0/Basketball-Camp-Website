@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import type { Member } from '@prisma/client'
 
@@ -23,13 +24,17 @@ function sportColor(team: string | null) {
 }
 
 function MemberCard({ m, paid }: { m: Member; paid: boolean }) {
+  const router = useRouter()
   const age = ageFromDob(m.dateOfBirth)
   const colors = sportColor(m.teamAssignment)
 
   return (
-    <Link
-      href={`/members/${m.id}`}
-      className="group bg-white rounded-2xl shadow-sm ring-1 ring-black/5 p-5 flex flex-col gap-4
+    <div
+      onClick={() => router.push(`/members/${m.id}`)}
+      role="link"
+      tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter') router.push(`/members/${m.id}`) }}
+      className="group bg-white rounded-2xl shadow-sm ring-1 ring-black/5 p-5 flex flex-col gap-4 cursor-pointer
                  hover:-translate-y-1 hover:shadow-md transition-all duration-200"
     >
       {/* Avatar + name */}
@@ -94,7 +99,7 @@ function MemberCard({ m, paid }: { m: Member; paid: boolean }) {
           Edit
         </Link>
       </div>
-    </Link>
+    </div>
   )
 }
 
