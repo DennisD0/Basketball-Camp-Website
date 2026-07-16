@@ -10,6 +10,15 @@ async function requireAuth() {
 export async function POST(request: NextRequest) {
   if (!(await requireAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  try {
+    return await runImport(request)
+  } catch (err) {
+    console.error('[import]', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
+
+async function runImport(request: NextRequest) {
   const { members: memberRows, attendance: attendanceRows } = await request.json()
 
   let membersCreated = 0

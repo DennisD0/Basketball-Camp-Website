@@ -170,8 +170,9 @@ export default function ImportPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ members, attendance }),
       })
-      const data = await res.json()
-      if (!res.ok) { setImportError(data.error ?? 'Import failed'); setStatus('error'); return }
+      let data: { error?: string; membersCreated?: number; membersUpdated?: number; attendanceCreated?: number } = {}
+      try { data = await res.json() } catch { /* empty body — likely a timeout */ }
+      if (!res.ok) { setImportError(data.error ?? 'Import failed — the request may have timed out.'); setStatus('error'); return }
       setResult(data)
       setStatus('done')
     } catch (e) {
