@@ -24,4 +24,12 @@
   .clip-path-angle {
     clip-path: polygon(0 0, 100% 0, 100% 88%, 0 100%);
   }
+  /* iOS safe area for bottom tab bar */
+  .safe-area-pb {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+  /* Skeleton shimmer */
+  .skeleton {
+    @apply bg-gray-200 animate-pulse rounded-lg;
+  }
 }

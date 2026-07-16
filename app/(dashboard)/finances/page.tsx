@@ -33,7 +33,7 @@ export default async function FinancesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-brand-navy">Finances</h1>
+        <h1 className="font-condensed font-bold text-2xl text-brand-navy tracking-wide">Finances</h1>
         <Link
           href="/finances/new"
           className="bg-brand-teal text-white px-5 py-2.5 rounded-full text-sm font-medium hover:bg-brand-teal/90 transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
@@ -117,9 +117,9 @@ export default async function FinancesPage() {
 function SummaryCard({ label, value, color }: { label: string; value: string; color: 'teal' | 'navy' | 'orange' }) {
   const textColor = { teal: 'text-brand-teal', navy: 'text-brand-navy', orange: 'text-brand-orange' }[color]
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5 hover:-translate-y-0.5 transition-transform duration-150">
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className={`text-3xl font-bold mt-1 tracking-tight ${textColor}`}>{value}</p>
+    <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+      <p className={`font-condensed font-bold text-3xl mt-1 ${textColor}`}>{value}</p>
     </div>
   )
 }

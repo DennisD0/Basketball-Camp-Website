@@ -14,7 +14,7 @@ export default async function RegistrationsPage() {
       <AutoRefresh />
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-brand-navy">Registrations</h1>
+          <h1 className="font-condensed font-bold text-2xl text-brand-navy tracking-wide">Registrations</h1>
           <p className="text-sm text-gray-400 mt-0.5">Parents who registered via the public form</p>
         </div>
         {pendingCount > 0 && (

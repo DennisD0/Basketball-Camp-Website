@@ -17,8 +17,8 @@ export default async function MembersPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-brand-navy">Members</h1>
-          <p className="text-sm text-gray-500 mt-1">{members.length} active member{members.length !== 1 ? 's' : ''}</p>
+          <h1 className="font-condensed font-bold text-2xl text-brand-navy tracking-wide">Members</h1>
+          <p className="text-sm text-gray-400 mt-0.5">{members.length} active member{members.length !== 1 ? 's' : ''}</p>
         </div>
         <Link
           href="/members/new"

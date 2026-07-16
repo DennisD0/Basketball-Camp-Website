@@ -1,105 +1,73 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import type { Member } from '@prisma/client'
 
-function initials(first: string, last: string) {
-  return `${first[0] ?? ''}${last[0] ?? ''}`.toUpperCase()
-}
-
-function ageFromDob(dob: Date | null) {
-  if (!dob) return null
-  return Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-}
-
-function sportColor(team: string | null) {
-  if (!team) return { bg: 'bg-gray-300', text: 'text-white', badge: 'bg-gray-100 text-gray-600' }
-  if (team.toLowerCase().includes('basketball'))
-    return { bg: 'bg-brand-navy', text: 'text-white', badge: 'bg-brand-navy/10 text-brand-navy' }
-  if (team.toLowerCase().includes('volleyball'))
-    return { bg: 'bg-brand-teal', text: 'text-white', badge: 'bg-brand-teal/10 text-brand-teal' }
-  return { bg: 'bg-gray-400', text: 'text-white', badge: 'bg-gray-100 text-gray-600' }
+const AVATAR_GRADS = [
+  'from-brand-navy to-brand-teal',
+  'from-purple-600 to-indigo-500',
+  'from-emerald-600 to-teal-500',
+  'from-blue-600 to-cyan-500',
+  'from-rose-600 to-pink-500',
+  'from-amber-600 to-orange-500',
+]
+function avatarGrad(name: string) {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff
+  return AVATAR_GRADS[Math.abs(h) % AVATAR_GRADS.length]
 }
 
 function MemberCard({ m, paid }: { m: Member; paid: boolean }) {
-  const router = useRouter()
-  const age = ageFromDob(m.dateOfBirth)
-  const colors = sportColor(m.teamAssignment)
+  const initials = `${m.firstName[0] ?? ''}${m.lastName?.[0] ?? ''}`.toUpperCase()
+  const grad = avatarGrad(m.firstName + m.lastName)
 
   return (
-    <div
-      onClick={() => router.push(`/members/${m.id}`)}
-      role="link"
-      tabIndex={0}
-      onKeyDown={e => { if (e.key === 'Enter') router.push(`/members/${m.id}`) }}
-      className="group bg-white rounded-2xl shadow-sm ring-1 ring-black/5 p-5 flex flex-col gap-4 cursor-pointer
-                 hover:-translate-y-1 hover:shadow-md transition-all duration-200"
+    <Link
+      href={`/members/${m.id}`}
+      className="group bg-white rounded-2xl shadow-sm ring-1 ring-black/5 p-4 flex items-center gap-3.5 hover:shadow-md hover:ring-brand-teal/20 active:scale-[0.99] transition-all duration-150"
     >
-      {/* Avatar + name */}
-      <div className="flex items-center gap-3">
-        <div className={`w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${colors.bg} ${colors.text}`}>
-          {initials(m.firstName, m.lastName)}
-        </div>
-        <div className="min-w-0">
-          <p className="font-semibold text-brand-navy leading-tight truncate">
-            {m.firstName} {m.lastName}
-          </p>
-          {age !== null && (
-            <p className="text-xs text-gray-400">Age {age}</p>
+      {/* Avatar */}
+      <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center font-bold text-sm text-white flex-shrink-0 shadow-sm`}>
+        {initials}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <p className="font-condensed font-bold text-brand-navy text-base leading-tight truncate">
+          {m.firstName} {m.lastName}
+        </p>
+        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+          {m.teamAssignment && (
+            <span className="text-[10px] font-semibold bg-brand-teal/10 text-brand-teal px-2 py-0.5 rounded-full">
+              {m.teamAssignment}
+            </span>
           )}
-        </div>
-      </div>
-
-      {/* Team badge + payment status */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {m.teamAssignment && (
-          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${colors.badge}`}>
-            {m.teamAssignment}
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+            paid ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+          }`}>
+            {paid ? 'Paid' : 'Unpaid'}
           </span>
-        )}
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-          paid ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-        }`}>
-          {paid ? 'Paid' : 'Unpaid'}
-        </span>
-      </div>
-
-      {/* Details */}
-      <div className="space-y-1.5 text-xs text-gray-500 border-t border-gray-50 pt-3">
-        {m.guardianName && (
-          <div className="flex items-center gap-1.5">
-            <IconPerson />
-            <span className="truncate">{m.guardianName}</span>
-          </div>
-        )}
-        {m.guardianPhone && (
-          <div className="flex items-center gap-1.5">
-            <IconPhone />
-            <span>{m.guardianPhone}</span>
-          </div>
-        )}
-        <div className="flex items-center gap-1.5">
-          <IconCalendar />
-          <span>Enrolled {new Date(m.enrollmentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
         </div>
+        {m.guardianName && (
+          <p className="text-[11px] text-gray-400 mt-1 truncate">{m.guardianName}</p>
+        )}
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-2 mt-auto pt-1">
-        <span className="flex-1 text-center text-xs font-medium py-1.5 rounded-full bg-brand-navy/5 text-brand-navy group-hover:bg-brand-navy group-hover:text-white transition-colors">
-          View
-        </span>
+      {/* Edit button + chevron */}
+      <div className="flex items-center gap-1 flex-shrink-0">
         <Link
           href={`/members/${m.id}/edit`}
           onClick={e => e.stopPropagation()}
-          className="flex-1 text-center text-xs font-medium py-1.5 rounded-full bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors"
+          className="text-[11px] font-semibold text-gray-400 hover:text-brand-navy px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
         >
           Edit
         </Link>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-gray-300">
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
       </div>
-    </div>
+    </Link>
   )
 }
 
@@ -107,69 +75,68 @@ export default function MemberTable({ members, paidMemberIds = [] }: { members: 
   const paidSet = new Set(paidMemberIds)
   const teams = ['All', ...Array.from(new Set(members.map(m => m.teamAssignment).filter(Boolean) as string[])).sort()]
   const [activeTab, setActiveTab] = useState('All')
-
   const filtered = activeTab === 'All' ? members : members.filter(m => m.teamAssignment === activeTab)
 
   if (members.length === 0) {
     return (
-      <div className="bg-white rounded-2xl p-12 text-center text-gray-400">
-        No members yet.{' '}
-        <Link href="/members/new" className="text-brand-navy underline">
-          Add the first one.
+      <div className="bg-white rounded-2xl p-12 text-center shadow-sm ring-1 ring-black/5">
+        <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-7 h-7 text-gray-300">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+        </div>
+        <p className="text-gray-500 font-medium text-sm">No members yet</p>
+        <Link href="/members/new" className="text-brand-teal text-sm font-semibold hover:underline mt-1 inline-block">
+          Add the first one →
         </Link>
       </div>
     )
   }
 
-  const bballCount = members.filter(m => m.teamAssignment?.includes('Basketball')).length
-  const vballCount = members.filter(m => m.teamAssignment?.includes('Volleyball')).length
+  const unpaidCount = members.filter(m => !paidSet.has(m.id)).length
 
   return (
-    <div className="space-y-5">
-      {/* Quick sport breakdown */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl p-4 shadow-sm ring-1 ring-black/5 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-brand-navy/10 flex items-center justify-center">
-            <IconBall className="text-brand-navy" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-400">Basketball</p>
-            <p className="font-bold text-brand-navy">{bballCount}</p>
-          </div>
+    <div className="space-y-4">
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-white rounded-xl p-3 shadow-sm ring-1 ring-black/5 text-center">
+          <p className="font-condensed font-bold text-2xl text-brand-navy">{members.length}</p>
+          <p className="text-[11px] text-gray-400 font-medium">Active</p>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm ring-1 ring-black/5 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-brand-teal/10 flex items-center justify-center">
-            <IconVball className="text-brand-teal" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-400">Volleyball</p>
-            <p className="font-bold text-brand-teal">{vballCount}</p>
-          </div>
+        <div className="bg-white rounded-xl p-3 shadow-sm ring-1 ring-black/5 text-center">
+          <p className="font-condensed font-bold text-2xl text-brand-teal">{members.length - unpaidCount}</p>
+          <p className="text-[11px] text-gray-400 font-medium">Paid</p>
+        </div>
+        <div className="bg-white rounded-xl p-3 shadow-sm ring-1 ring-black/5 text-center">
+          <p className="font-condensed font-bold text-2xl text-amber-500">{unpaidCount}</p>
+          <p className="text-[11px] text-gray-400 font-medium">Unpaid</p>
         </div>
       </div>
 
-      {/* Team filter tabs */}
-      <div className="flex gap-2 flex-wrap">
+      {/* Team filter */}
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
         {teams.map(tab => {
           const count = tab === 'All' ? members.length : members.filter(m => m.teamAssignment === tab).length
           return (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 ${
                 activeTab === tab
                   ? 'bg-brand-navy text-white shadow-sm'
-                  : 'bg-white text-gray-500 ring-1 ring-black/10 hover:bg-gray-50'
+                  : 'bg-white text-gray-500 ring-1 ring-black/10 hover:bg-gray-50 active:bg-gray-100'
               }`}
             >
-              {tab} <span className={`ml-1 text-xs ${activeTab === tab ? 'opacity-70' : 'text-gray-400'}`}>{count}</span>
+              {tab}
+              <span className={`ml-1.5 ${activeTab === tab ? 'opacity-60' : 'text-gray-400'}`}>{count}</span>
             </button>
           )
         })}
       </div>
 
-      {/* Card grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {/* Member list */}
+      <div className="space-y-2">
         {filtered.map(m => (
           <MemberCard key={m.id} m={m} paid={paidSet.has(m.id)} />
         ))}
@@ -177,39 +144,3 @@ export default function MemberTable({ members, paidMemberIds = [] }: { members: 
     </div>
   )
 }
-
-// Icons
-const IconPerson = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0">
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-    <circle cx="12" cy="7" r="4"/>
-  </svg>
-)
-const IconPhone = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0">
-    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6.13 6.13l.95-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
-  </svg>
-)
-const IconCalendar = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0">
-    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-    <line x1="16" y1="2" x2="16" y2="6"/>
-    <line x1="8" y1="2" x2="8" y2="6"/>
-    <line x1="3" y1="10" x2="21" y2="10"/>
-  </svg>
-)
-const IconBall = ({ className }: { className?: string }) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
-    <circle cx="12" cy="12" r="10"/>
-    <path d="M4.93 4.93c4.97 4.97 10.07 10.07 14.14 14.14"/>
-    <path d="M9 3.5c0 5 6 9 6 9"/>
-    <path d="M9 20.5c0-5 6-9 6-9"/>
-  </svg>
-)
-const IconVball = ({ className }: { className?: string }) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
-    <circle cx="12" cy="12" r="10"/>
-    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-    <path d="M2 12h20"/>
-  </svg>
-)

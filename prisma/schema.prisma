@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum MemberStatus {
@@ -47,6 +48,7 @@ model Member {
   guardianName  String? @map("guardian_name")
   guardianEmail String? @map("guardian_email")
   guardianPhone String? @map("guardian_phone")
+  sessionsTotal Int     @default(8) @map("sessions_total")
 
   attendance    Attendance[]
   payments      Payment[]
@@ -69,6 +71,7 @@ model Session {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@unique([date])
   @@map("sessions")
 }
 

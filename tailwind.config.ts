@@ -19,7 +19,8 @@ const config: Config = {
         '4xl': '2rem',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-barlow)', 'system-ui', 'sans-serif'],
+        condensed: ['var(--font-barlow-condensed)', 'system-ui', 'sans-serif'],
       },
       keyframes: {
         marquee: {
