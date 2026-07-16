@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(request: NextRequest) {
   const { password } = await request.json()
 
-  if (!password || password !== process.env.ADMIN_PASSWORD) {
+  if (!password || password !== (process.env.ADMIN_PASSWORD ?? '1234')) {
     return NextResponse.json({ error: 'Wrong password' }, { status: 401 })
   }
 
