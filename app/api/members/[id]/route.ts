@@ -9,12 +9,14 @@ async function requireAuth() {
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await requireAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   const { id } = await params
-  const member = await prisma.member.findUnique({ where: { id } })
-  if (!member) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  return NextResponse.json(member)
+  try {
+    const member = await prisma.member.findUnique({ where: { id } })
+    if (!member) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    return NextResponse.json(member)
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -28,31 +30,36 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'First name and last name are required' }, { status: 400 })
   }
 
-  const member = await prisma.member.update({
-    where: { id },
-    data: {
-      firstName:      firstName.trim(),
-      lastName:       lastName.trim(),
-      dateOfBirth:    dateOfBirth ? new Date(dateOfBirth) : null,
-      teamAssignment: teamAssignment?.trim() || null,
-      enrollmentDate: enrollmentDate ? new Date(enrollmentDate) : undefined,
-      guardianName:   guardianName?.trim() || null,
-      guardianEmail:  guardianEmail?.trim() || null,
-      guardianPhone:  guardianPhone?.trim() || null,
-    },
-  })
-
-  return NextResponse.json(member)
+  try {
+    const member = await prisma.member.update({
+      where: { id },
+      data: {
+        firstName:      firstName.trim(),
+        lastName:       lastName.trim(),
+        dateOfBirth:    dateOfBirth ? new Date(dateOfBirth) : null,
+        teamAssignment: teamAssignment?.trim() || null,
+        enrollmentDate: enrollmentDate ? new Date(enrollmentDate) : undefined,
+        guardianName:   guardianName?.trim() || null,
+        guardianEmail:  guardianEmail?.trim() || null,
+        guardianPhone:  guardianPhone?.trim() || null,
+      },
+    })
+    return NextResponse.json(member)
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await requireAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   const { id } = await params
-  const member = await prisma.member.update({
-    where: { id },
-    data: { status: 'ARCHIVED', archivedAt: new Date() },
-  })
-
-  return NextResponse.json(member)
+  try {
+    const member = await prisma.member.update({
+      where: { id },
+      data: { status: 'ARCHIVED', archivedAt: new Date() },
+    })
+    return NextResponse.json(member)
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
 }

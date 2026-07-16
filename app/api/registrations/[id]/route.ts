@@ -40,47 +40,52 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
   }
 
-  const reg = await prisma.registration.update({ where: { id }, data: { status } })
+  try {
+    const reg = await prisma.registration.update({ where: { id }, data: { status } })
 
-  // Auto-create a Member when approved
-  let memberId: string | null = null
-  if (status === 'APPROVED') {
-    const [firstName, ...rest] = reg.childName.trim().split(' ')
-    const lastName = rest.join(' ') || '—'
-    const teamAssignment = `${reg.ageGroup} ${reg.sport}`
+    // Auto-create a Member when approved
+    let memberId: string | null = null
+    if (status === 'APPROVED') {
+      const [firstName, ...rest] = reg.childName.trim().split(' ')
+      const lastName = rest.join(' ') || '—'
+      const teamAssignment = `${reg.ageGroup} ${reg.sport}`
 
-    const member = await prisma.member.create({
-      data: {
-        firstName,
-        lastName,
-        teamAssignment,
-        guardianName: reg.parentName,
-        guardianEmail: reg.parentEmail,
-        guardianPhone: reg.parentPhone,
-        enrollmentDate: new Date(),
-        status: 'ACTIVE',
-      },
-    })
-    memberId = member.id
-
-    if (reg.parentEmail) {
-      await sendComposedEmail({
-        to:           reg.parentEmail,
-        guardianName: reg.parentName,
-        subject:      `${reg.childName} is registered for 413 Youth Club! 🏀`,
-        body:         approvalEmailBody(reg),
-      })
-
-      await prisma.notification.create({
+      const member = await prisma.member.create({
         data: {
-          memberId: member.id,
-          type:     'registration_approved',
-          channel:  'email',
-          content:  `Approval confirmation sent to ${reg.parentEmail}`,
+          firstName,
+          lastName,
+          teamAssignment,
+          guardianName: reg.parentName,
+          guardianEmail: reg.parentEmail,
+          guardianPhone: reg.parentPhone,
+          enrollmentDate: new Date(),
+          status: 'ACTIVE',
         },
       })
-    }
-  }
+      memberId = member.id
 
-  return NextResponse.json({ ...reg, memberId })
+      if (reg.parentEmail) {
+        await sendComposedEmail({
+          to:           reg.parentEmail,
+          guardianName: reg.parentName,
+          subject:      `${reg.childName} is registered for 413 Youth Club! 🏀`,
+          body:         approvalEmailBody(reg),
+        })
+
+        await prisma.notification.create({
+          data: {
+            memberId: member.id,
+            type:     'registration_approved',
+            channel:  'email',
+            content:  `Approval confirmation sent to ${reg.parentEmail}`,
+          },
+        })
+      }
+    }
+
+    return NextResponse.json({ ...reg, memberId })
+  } catch (err) {
+    console.error('[registrations/patch]', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
 }

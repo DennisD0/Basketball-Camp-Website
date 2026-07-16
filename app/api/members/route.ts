@@ -9,12 +9,15 @@ async function requireAuth() {
 
 export async function GET() {
   if (!(await requireAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const members = await prisma.member.findMany({
-    where: { status: 'ACTIVE' },
-    orderBy: { createdAt: 'desc' },
-  })
-  return NextResponse.json(members)
+  try {
+    const members = await prisma.member.findMany({
+      where: { status: 'ACTIVE' },
+      orderBy: { createdAt: 'desc' },
+    })
+    return NextResponse.json(members)
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -27,18 +30,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'First name and last name are required' }, { status: 400 })
   }
 
-  const member = await prisma.member.create({
-    data: {
-      firstName:      firstName.trim(),
-      lastName:       lastName.trim(),
-      dateOfBirth:    dateOfBirth ? new Date(dateOfBirth) : null,
-      teamAssignment: teamAssignment?.trim() || null,
-      enrollmentDate: enrollmentDate ? new Date(enrollmentDate) : new Date(),
-      guardianName:   guardianName?.trim() || null,
-      guardianEmail:  guardianEmail?.trim() || null,
-      guardianPhone:  guardianPhone?.trim() || null,
-    },
-  })
-
-  return NextResponse.json(member, { status: 201 })
+  try {
+    const member = await prisma.member.create({
+      data: {
+        firstName:      firstName.trim(),
+        lastName:       lastName.trim(),
+        dateOfBirth:    dateOfBirth ? new Date(dateOfBirth) : null,
+        teamAssignment: teamAssignment?.trim() || null,
+        enrollmentDate: enrollmentDate ? new Date(enrollmentDate) : new Date(),
+        guardianName:   guardianName?.trim() || null,
+        guardianEmail:  guardianEmail?.trim() || null,
+        guardianPhone:  guardianPhone?.trim() || null,
+      },
+    })
+    return NextResponse.json(member, { status: 201 })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
 }
