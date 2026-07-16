@@ -200,6 +200,35 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
           />
         </div>
 
+        {/* Attendance history */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5 sm:col-span-2">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">All Attendance Dates</p>
+          {allAttendance.length === 0 ? (
+            <p className="text-sm text-gray-400 py-4 text-center">No sessions attended yet.</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {allAttendance.map((a, i) => {
+                const ds = a.session.date.toISOString().slice(0, 10)
+                const label = new Date(ds + 'T12:00:00Z').toLocaleDateString('en-US', {
+                  weekday: 'short', month: 'short', day: 'numeric',
+                })
+                return (
+                  <Link
+                    key={a.id}
+                    href={`/attendance/${ds}`}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-brand-teal/8 hover:bg-brand-teal/15 transition-colors group"
+                  >
+                    <span className="w-5 h-5 rounded-full bg-brand-teal flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+                      {i + 1}
+                    </span>
+                    <span className="text-xs font-semibold text-brand-teal group-hover:text-brand-teal/80 truncate">{label}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Payments */}
         <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5 sm:col-span-2">
           <div className="flex items-center justify-between mb-4">
