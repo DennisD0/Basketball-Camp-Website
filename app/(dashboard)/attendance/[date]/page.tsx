@@ -37,21 +37,26 @@ export default async function AttendanceDatePage({ params }: { params: Promise<{
     },
   })
 
-  const memberMap = new Map<string, { member: typeof sessions[0]['attendance'][0]['member']; sessionsAttended: number }>()
+  // Collect all attendees from sessions
+  const memberMap = new Map<string, typeof sessions[0]['attendance'][0]['member']>()
   for (const session of sessions) {
     for (const record of session.attendance) {
-      if (!memberMap.has(record.memberId)) {
-        const count = await prisma.attendance.count({
-          where: { memberId: record.memberId, status: 'PRESENT' },
-        })
-        memberMap.set(record.memberId, { member: record.member, sessionsAttended: count })
-      }
+      if (!memberMap.has(record.memberId)) memberMap.set(record.memberId, record.member)
     }
   }
 
-  const attendees = Array.from(memberMap.values()).sort((a, b) =>
-    a.member.firstName.localeCompare(b.member.firstName)
-  )
+  // Fetch all attendance counts in ONE query instead of N sequential queries
+  const memberIds = Array.from(memberMap.keys())
+  const countRows = await prisma.attendance.groupBy({
+    by: ['memberId'],
+    where: { memberId: { in: memberIds }, status: 'PRESENT' },
+    _count: { memberId: true },
+  })
+  const countByMember = Object.fromEntries(countRows.map(r => [r.memberId, r._count.memberId]))
+
+  const attendees = Array.from(memberMap.values())
+    .map(member => ({ member, sessionsAttended: countByMember[member.id] ?? 0 }))
+    .sort((a, b) => a.member.firstName.localeCompare(b.member.firstName))
 
   const label = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
