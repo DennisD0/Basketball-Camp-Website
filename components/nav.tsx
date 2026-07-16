@@ -123,32 +123,30 @@ export default function Nav() {
         </div>
       </nav>
 
-      {/* ── Mobile bottom tab bar (< md) ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200/80 safe-area-pb">
-        <div className="flex" style={{ height: '56px' }}>
-          {NAV_LINKS.map(link => {
-            const active = isActive(link.href)
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors cursor-pointer ${
-                  active ? 'text-brand-teal' : 'text-gray-400 active:text-gray-600'
-                }`}
-              >
-                {/* Active top indicator */}
-                {active && (
-                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-brand-teal rounded-full" />
-                )}
-                <span className={active ? 'text-brand-teal' : 'text-gray-400'}>{link.icon}</span>
-                <span className={`text-[10px] font-semibold leading-none tracking-wide ${active ? 'text-brand-teal' : 'text-gray-400'}`}>
-                  {link.label}
-                </span>
-              </Link>
-            )
-          })}
-        </div>
-      </nav>
+      {/* ── Mobile floating bottom tab bar (< md) ── */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 pb-5" style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
+        <nav className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl shadow-black/15 ring-1 ring-black/8">
+          <div className="flex px-2 py-2">
+            {NAV_LINKS.map(link => {
+              const active = isActive(link.href)
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`relative flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl transition-all duration-150 cursor-pointer ${
+                    active ? 'bg-brand-teal/10' : 'active:bg-gray-100'
+                  }`}
+                >
+                  <span className={active ? 'text-brand-teal' : 'text-gray-400'}>{link.icon}</span>
+                  <span className={`text-[10px] font-semibold leading-none ${active ? 'text-brand-teal' : 'text-gray-400'}`}>
+                    {link.label}
+                  </span>
+                </Link>
+              )
+            })}
+          </div>
+        </nav>
+      </div>
     </>
   )
 }
