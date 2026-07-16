@@ -173,7 +173,7 @@ export default function ImportPage() {
       let data: { error?: string; membersCreated?: number; membersUpdated?: number; attendanceCreated?: number } = {}
       try { data = await res.json() } catch { /* empty body — likely a timeout */ }
       if (!res.ok) { setImportError(data.error ?? 'Import failed — the request may have timed out.'); setStatus('error'); return }
-      setResult(data)
+      setResult({ membersCreated: data.membersCreated ?? 0, membersUpdated: data.membersUpdated ?? 0, attendanceCreated: data.attendanceCreated ?? 0 })
       setStatus('done')
     } catch (e) {
       setImportError(String(e))
