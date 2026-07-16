@@ -4,10 +4,21 @@ import DeletePaymentButton from '@/components/finances/delete-payment-button'
 import FinanceCharts from '@/components/finances/finance-charts'
 
 export default async function FinancesPage() {
-  const payments = await prisma.payment.findMany({
-    include: { member: { select: { id: true, firstName: true, lastName: true, teamAssignment: true } } },
-    orderBy: { date: 'desc' },
-  })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let payments: any[] = []
+  let activeMembers = 0
+
+  try {
+    ;[payments, activeMembers] = await Promise.all([
+      prisma.payment.findMany({
+        include: { member: { select: { id: true, firstName: true, lastName: true, teamAssignment: true } } },
+        orderBy: { date: 'desc' },
+      }),
+      prisma.member.count({ where: { status: 'ACTIVE' } }),
+    ])
+  } catch {
+    return <EmptyState message="Could not reach the database. Add your DATABASE_URL in Vercel environment variables and redeploy." />
+  }
 
   const total = payments.reduce((sum, p) => sum + Number(p.amount), 0)
 
@@ -19,11 +30,9 @@ export default async function FinancesPage() {
     })
     .reduce((sum, p) => sum + Number(p.amount), 0)
 
-  const activeMembers = await prisma.member.count({ where: { status: 'ACTIVE' } })
   const paidMemberIds = new Set(payments.map(p => p.memberId))
-  const unpaidCount   = Math.max(0, activeMembers - paidMemberIds.size)
+  const unpaidCount = Math.max(0, activeMembers - paidMemberIds.size)
 
-  // Serialize for client chart component
   const chartPayments = payments.map(p => ({
     amount: Number(p.amount),
     method: p.method,
@@ -120,6 +129,22 @@ function SummaryCard({ label, value, color }: { label: string; value: string; co
     <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5">
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
       <p className={`font-condensed font-bold text-3xl mt-1 ${textColor}`}>{value}</p>
+    </div>
+  )
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6">
+      <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-8 h-8 text-gray-300">
+          <ellipse cx="12" cy="5" rx="9" ry="3" />
+          <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" />
+          <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3" />
+        </svg>
+      </div>
+      <h2 className="font-condensed font-bold text-xl text-brand-navy mb-1">No data yet</h2>
+      <p className="text-sm text-gray-400 max-w-sm">{message}</p>
     </div>
   )
 }
