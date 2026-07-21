@@ -8,11 +8,23 @@ const PROGRAMS = [
   { value: 'regular',      label: 'Regular — $400', sub: 'by July 5' },
 ]
 
-const AGE_GROUPS = ['U12 (Ages 12–13)', 'U14 (Ages 14–15)', 'U16 (Ages 15–16)']
+const PACKAGES = [
+  { value: '5-week', label: '5-Week Package', sessions: 5, windowWeeks: 7, description: '5 classes · complete within 7 weeks' },
+  { value: '7-week', label: '7-Week Package', sessions: 7, windowWeeks: 9, description: '7 classes · complete within 9 weeks' },
+]
+
+const AGE_GROUPS = [
+  'U6 (Ages 5–6)',
+  'U8 (Ages 7–8)',
+  'U10 (Ages 9–10)',
+  'U12 (Ages 11–12)',
+  'U14 (Ages 13–14)',
+  'U16 (Ages 15–16)',
+]
 const SPORTS     = ['Basketball', 'Volleyball']
 
 export default function RegistrationForm() {
-  const [step, setStep] = useState<'form' | 'success'>('form')
+  const [step, setStep] = useState<'form' | 'confirm' | 'success'>('form')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState({
@@ -24,6 +36,7 @@ export default function RegistrationForm() {
     sport:           '',
     ageGroup:        '',
     programOption:   '',
+    packageOption:   '7-week',
     mediaConsent:    false,
     injuryWaiver:    false,
     noRefundAck:     false,
@@ -33,12 +46,18 @@ export default function RegistrationForm() {
     setForm(f => ({ ...f, [key]: value }))
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setError('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    setStep('confirm')
+  }
+
+  async function handleConfirm() {
     setLoading(true)
     setError('')
 
-    const ageValue = form.ageGroup.split(' ')[0] // "U12", "U14", "U16"
+    const ageValue = form.ageGroup.split(' ')[0]
 
     const res = await fetch('/api/register', {
       method: 'POST',
@@ -50,9 +69,67 @@ export default function RegistrationForm() {
     if (res.ok) {
       setStep('success')
     } else {
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       setError(data.error || 'Something went wrong. Please try again.')
+      setStep('form')
     }
+  }
+
+  if (step === 'confirm') {
+    const selectedProgram = PROGRAMS.find(p => p.value === form.programOption)
+    return (
+      <div className="space-y-6">
+        <div className="text-center mb-2">
+          <h2 className="text-xl font-bold text-brand-navy">Review Your Registration</h2>
+          <p className="text-sm text-gray-400 mt-1">Please confirm the details below before submitting.</p>
+        </div>
+
+        <div className="bg-[#F4F2EE] rounded-2xl p-5 space-y-3">
+          <Row label="Child's Name" value={form.childName} />
+          <Row label="Sport" value={form.sport} />
+          <Row label="Age Group" value={form.ageGroup} />
+          <Row label="Program" value={selectedProgram ? `${selectedProgram.label}` : form.programOption} />
+          <Row label="Parent / Guardian" value={form.parentName} />
+          <Row label="Email" value={form.parentEmail} />
+          <Row label="Phone" value={form.parentPhone} />
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 ring-1 ring-black/5 space-y-2">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Agreements Confirmed</p>
+          <AckRow checked={form.injuryWaiver} label="Injury Liability Waiver" />
+          <AckRow checked={form.noRefundAck} label="No Refund Policy" />
+          <AckRow checked={form.mediaConsent} label="Media Consent" />
+          <AckRow checked={form.whatsappConsent} label="WhatsApp Group Communications" />
+        </div>
+
+        <div className="bg-brand-teal/5 rounded-2xl p-5 ring-1 ring-brand-teal/20">
+          <p className="text-xs font-semibold text-brand-teal uppercase tracking-wider mb-2">Payment Instructions</p>
+          <p className="text-sm text-gray-600">Zelle: <span className="font-semibold text-gray-800">347-200-4439</span></p>
+          <p className="text-sm text-gray-600">Venmo: <span className="font-semibold text-gray-800">@benro97</span></p>
+          <p className="text-xs text-gray-400 mt-2">Include your child's name in the memo. No spot is held until payment is received.</p>
+        </div>
+
+        {error && <p className="text-sm text-red-500 bg-red-50 rounded-lg px-4 py-3">{error}</p>}
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => setStep('form')}
+            className="flex-1 py-3 rounded-full border-2 border-gray-200 text-sm font-semibold text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all"
+          >
+            Go Back
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={loading}
+            className="flex-1 py-3 rounded-full bg-brand-teal text-white text-sm font-semibold hover:bg-brand-teal/90 disabled:opacity-60 transition-all"
+          >
+            {loading ? 'Submitting…' : 'Confirm & Submit'}
+          </button>
+        </div>
+      </div>
+    )
   }
 
   if (step === 'success') {
@@ -143,6 +220,39 @@ export default function RegistrationForm() {
 
       <hr className="border-gray-100" />
 
+      {/* Package selection */}
+      <fieldset>
+        <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Session Package</legend>
+        <div className="space-y-2">
+          {PACKAGES.map(p => (
+            <label
+              key={p.value}
+              className={`flex items-center justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                form.packageOption === p.value
+                  ? 'border-brand-teal bg-brand-teal/5'
+                  : 'border-gray-100 hover:border-gray-200'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <input
+                  type="radio" name="package" value={p.value}
+                  checked={form.packageOption === p.value}
+                  onChange={() => set('packageOption', p.value)}
+                  className="accent-[#2C6E6A]"
+                />
+                <div>
+                  <span className="text-sm font-semibold text-gray-800">{p.label}</span>
+                  <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-brand-teal flex-shrink-0">{p.sessions} classes</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <hr className="border-gray-100" />
+
       {/* Program selection */}
       <fieldset>
         <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Registration Option</legend>
@@ -226,6 +336,26 @@ function Field({ label, required, children }: { label: string; required?: boolea
         {label}{required && <span className="text-brand-orange ml-0.5">*</span>}
       </label>
       {children}
+    </div>
+  )
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-xs font-medium text-gray-400">{label}</span>
+      <span className="text-sm font-semibold text-gray-800 text-right">{value || '—'}</span>
+    </div>
+  )
+}
+
+function AckRow({ checked, label }: { checked: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${checked ? 'bg-brand-teal' : 'bg-gray-200'}`}>
+        {checked && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+      </span>
+      <span className={`text-xs ${checked ? 'text-gray-700' : 'text-gray-400 line-through'}`}>{label}</span>
     </div>
   )
 }

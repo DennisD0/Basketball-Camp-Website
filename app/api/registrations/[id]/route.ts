@@ -58,6 +58,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           guardianName: reg.parentName,
           guardianEmail: reg.parentEmail,
           guardianPhone: reg.parentPhone,
+          sessionsTotal: reg.packageOption === '5-week' ? 5 : 7,
           enrollmentDate: new Date(),
           status: 'ACTIVE',
         },

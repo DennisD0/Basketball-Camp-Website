@@ -147,6 +147,7 @@ model Registration {
   mediaConsent    Boolean  @map("media_consent")
   injuryWaiver    Boolean  @map("injury_waiver")
   noRefundAck     Boolean  @map("no_refund_ack")
+  packageOption   String   @default("7-week") @map("package_option")
   status          String   @default("PENDING")
   notes           String?
   createdAt       DateTime @default(now()) @map("created_at")
