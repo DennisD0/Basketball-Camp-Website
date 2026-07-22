@@ -37,6 +37,8 @@ export default async function FinancesPage() {
     amount: Number(p.amount),
     method: p.method,
     date: p.date.toISOString(),
+    memberId: p.memberId,
+    memberName: `${p.member.firstName} ${p.member.lastName}`,
   }))
 
   return (

@@ -2,10 +2,13 @@
 
 import { useState } from 'react'
 
-const PROGRAMS = [
-  { value: 'early_bird',   label: 'Early Bird — $350', sub: 'by June 6' },
-  { value: 'memorial_day', label: 'Memorial Day Sale — $300', sub: 'by May 31' },
-  { value: 'regular',      label: 'Regular — $400', sub: 'by July 5' },
+const SPORT_PROGRAMS = [
+  { value: 'basketball_early_bird',   sport: 'Basketball', label: 'Basketball — Early Bird',        price: '$350', sub: 'by June 6' },
+  { value: 'basketball_memorial_day', sport: 'Basketball', label: 'Basketball — Memorial Day Sale', price: '$300', sub: 'by May 31' },
+  { value: 'basketball_regular',      sport: 'Basketball', label: 'Basketball — Regular',           price: '$400', sub: 'by July 5' },
+  { value: 'volleyball_early_bird',   sport: 'Volleyball', label: 'Volleyball — Early Bird',        price: '$350', sub: 'by June 6' },
+  { value: 'volleyball_memorial_day', sport: 'Volleyball', label: 'Volleyball — Memorial Day Sale', price: '$300', sub: 'by May 31' },
+  { value: 'volleyball_regular',      sport: 'Volleyball', label: 'Volleyball — Regular',           price: '$400', sub: 'by July 5' },
 ]
 
 const PACKAGES = [
@@ -21,7 +24,6 @@ const AGE_GROUPS = [
   'U14 (Ages 13–14)',
   'U16 (Ages 15–16)',
 ]
-const SPORTS     = ['Basketball', 'Volleyball']
 
 export default function RegistrationForm() {
   const [step, setStep] = useState<'form' | 'confirm' | 'success'>('form')
@@ -33,9 +35,8 @@ export default function RegistrationForm() {
     parentPhone:     '',
     whatsappConsent: false,
     childName:       '',
-    sport:           '',
     ageGroup:        '',
-    programOption:   '',
+    sportProgram:    '',   // combined sport+program key
     packageOption:   '7-week',
     mediaConsent:    false,
     injuryWaiver:    false,
@@ -57,12 +58,26 @@ export default function RegistrationForm() {
     setLoading(true)
     setError('')
 
+    const selected = SPORT_PROGRAMS.find(p => p.value === form.sportProgram)
     const ageValue = form.ageGroup.split(' ')[0]
 
     const res = await fetch('/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, ageGroup: ageValue }),
+      body: JSON.stringify({
+        parentName:      form.parentName,
+        parentEmail:     form.parentEmail,
+        parentPhone:     form.parentPhone,
+        whatsappConsent: form.whatsappConsent,
+        childName:       form.childName,
+        ageGroup:        ageValue,
+        sport:           selected?.sport ?? '',
+        programOption:   form.sportProgram,
+        packageOption:   form.packageOption,
+        mediaConsent:    form.mediaConsent,
+        injuryWaiver:    form.injuryWaiver,
+        noRefundAck:     form.noRefundAck,
+      }),
     })
 
     setLoading(false)
@@ -76,7 +91,8 @@ export default function RegistrationForm() {
   }
 
   if (step === 'confirm') {
-    const selectedProgram = PROGRAMS.find(p => p.value === form.programOption)
+    const selected = SPORT_PROGRAMS.find(p => p.value === form.sportProgram)
+    const pkg = PACKAGES.find(p => p.value === form.packageOption)
     return (
       <div className="space-y-6">
         <div className="text-center mb-2">
@@ -85,20 +101,20 @@ export default function RegistrationForm() {
         </div>
 
         <div className="bg-[#F4F2EE] rounded-2xl p-5 space-y-3">
-          <Row label="Child's Name" value={form.childName} />
-          <Row label="Sport" value={form.sport} />
-          <Row label="Age Group" value={form.ageGroup} />
-          <Row label="Program" value={selectedProgram ? `${selectedProgram.label}` : form.programOption} />
+          <Row label="Child's Name"     value={form.childName} />
+          <Row label="Age Group"        value={form.ageGroup} />
+          <Row label="Sport & Program"  value={selected ? `${selected.label} (${selected.price})` : form.sportProgram} />
+          <Row label="Package"          value={pkg ? `${pkg.label} — ${pkg.sessions} classes` : form.packageOption} />
           <Row label="Parent / Guardian" value={form.parentName} />
-          <Row label="Email" value={form.parentEmail} />
-          <Row label="Phone" value={form.parentPhone} />
+          <Row label="Email"            value={form.parentEmail} />
+          <Row label="Phone"            value={form.parentPhone} />
         </div>
 
         <div className="bg-white rounded-2xl p-5 ring-1 ring-black/5 space-y-2">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Agreements Confirmed</p>
-          <AckRow checked={form.injuryWaiver} label="Injury Liability Waiver" />
-          <AckRow checked={form.noRefundAck} label="No Refund Policy" />
-          <AckRow checked={form.mediaConsent} label="Media Consent" />
+          <AckRow checked={form.injuryWaiver}    label="Injury Liability Waiver" />
+          <AckRow checked={form.noRefundAck}     label="No Refund Policy" />
+          <AckRow checked={form.mediaConsent}    label="Media Consent" />
           <AckRow checked={form.whatsappConsent} label="WhatsApp Group Communications" />
         </div>
 
@@ -201,20 +217,46 @@ export default function RegistrationForm() {
               className={inputCls}
             />
           </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Sport" required>
-              <select required value={form.sport} onChange={e => set('sport', e.target.value)} className={inputCls}>
-                <option value="">Select…</option>
-                {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </Field>
-            <Field label="Age Group" required>
-              <select required value={form.ageGroup} onChange={e => set('ageGroup', e.target.value)} className={inputCls}>
-                <option value="">Select…</option>
-                {AGE_GROUPS.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </Field>
-          </div>
+          <Field label="Age Group" required>
+            <select required value={form.ageGroup} onChange={e => set('ageGroup', e.target.value)} className={inputCls}>
+              <option value="">Select…</option>
+              {AGE_GROUPS.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </Field>
+        </div>
+      </fieldset>
+
+      <hr className="border-gray-100" />
+
+      {/* Sport + Pricing combined */}
+      <fieldset>
+        <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Sport & Registration Option</legend>
+        <p className="text-xs text-gray-400 mb-3">Choose your sport and pricing tier together</p>
+        <div className="space-y-2">
+          {SPORT_PROGRAMS.map(p => (
+            <label
+              key={p.value}
+              className={`flex items-center justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                form.sportProgram === p.value
+                  ? 'border-brand-teal bg-brand-teal/5'
+                  : 'border-gray-100 hover:border-gray-200'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <input
+                  type="radio" name="sportProgram" value={p.value} required
+                  checked={form.sportProgram === p.value}
+                  onChange={() => set('sportProgram', p.value)}
+                  className="accent-[#2C6E6A]"
+                />
+                <div>
+                  <span className="text-sm font-semibold text-gray-800">{p.label}</span>
+                  <p className="text-xs text-gray-400 mt-0.5">{p.sub}</p>
+                </div>
+              </div>
+              <span className="text-sm font-bold text-brand-teal flex-shrink-0">{p.price}</span>
+            </label>
+          ))}
         </div>
       </fieldset>
 
@@ -246,36 +288,6 @@ export default function RegistrationForm() {
                 </div>
               </div>
               <span className="text-xs font-bold text-brand-teal flex-shrink-0">{p.sessions} classes</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      <hr className="border-gray-100" />
-
-      {/* Program selection */}
-      <fieldset>
-        <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Registration Option</legend>
-        <div className="space-y-2">
-          {PROGRAMS.map(p => (
-            <label
-              key={p.value}
-              className={`flex items-center justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                form.programOption === p.value
-                  ? 'border-brand-teal bg-brand-teal/5'
-                  : 'border-gray-100 hover:border-gray-200'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <input
-                  type="radio" name="program" value={p.value} required
-                  checked={form.programOption === p.value}
-                  onChange={() => set('programOption', p.value)}
-                  className="accent-[#2C6E6A]"
-                />
-                <span className="text-sm font-medium text-gray-800">{p.label}</span>
-              </div>
-              <span className="text-xs text-gray-400">{p.sub}</span>
             </label>
           ))}
         </div>
@@ -317,7 +329,7 @@ export default function RegistrationForm() {
         disabled={loading}
         className="w-full bg-brand-teal text-white py-3.5 rounded-full font-semibold text-sm hover:bg-brand-teal/90 transition-all disabled:opacity-60 hover:-translate-y-0.5"
       >
-        {loading ? 'Submitting…' : 'Submit Registration'}
+        {loading ? 'Submitting…' : 'Review Registration'}
       </button>
 
       <p className="text-xs text-gray-400 text-center">

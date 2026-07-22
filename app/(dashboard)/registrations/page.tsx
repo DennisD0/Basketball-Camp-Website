@@ -1,6 +1,7 @@
 import prisma from '@/lib/prisma'
 import RegistrationList from '@/components/registrations/registration-list'
 import AutoRefresh from '@/components/auto-refresh'
+import PricingManager from '@/components/registrations/pricing-manager'
 
 export default async function RegistrationsPage() {
   let registrations: Awaited<ReturnType<typeof prisma.registration.findMany>> = []
@@ -23,11 +24,14 @@ export default async function RegistrationsPage() {
           <h1 className="font-condensed font-bold text-2xl text-brand-navy tracking-wide">Registrations</h1>
           <p className="text-sm text-gray-400 mt-0.5">Parents who registered via the public form</p>
         </div>
-        {pendingCount > 0 && (
-          <span className="bg-brand-orange/10 text-brand-orange text-xs font-semibold px-3 py-1.5 rounded-full">
-            {pendingCount} pending
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {pendingCount > 0 && (
+            <span className="bg-brand-orange/10 text-brand-orange text-xs font-semibold px-3 py-1.5 rounded-full">
+              {pendingCount} pending
+            </span>
+          )}
+          <PricingManager />
+        </div>
       </div>
 
       {registrations.length === 0 ? (
