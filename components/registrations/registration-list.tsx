@@ -130,9 +130,21 @@ function RegistrationCard({ r, onRefresh }: { r: Registration; onRefresh: () => 
         <span className="text-xs text-gray-400">
           {new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </span>
-        {r.status === 'PENDING' && !result && (
+        {r.status === 'PENDING' && !result ? (
           <ActionButtons id={r.id} onDone={handleDone} />
-        )}
+        ) : (r.status === 'APPROVED' || result?.approved) ? (
+          <a
+            href={`/registrations/${r.id}/contract`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-gray-50 text-gray-600 rounded-full hover:bg-gray-100 transition-all ring-1 ring-black/10"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+              <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+            </svg>
+            Print Contract
+          </a>
+        ) : null}
       </div>
     </div>
   )
