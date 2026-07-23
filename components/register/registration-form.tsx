@@ -46,6 +46,8 @@ export default function RegistrationForm() {
     mediaConsent:    false,
     injuryWaiver:    false,
     noRefundAck:     false,
+    printedName:     '',
+    signedDate:      '',
   })
 
   function set<K extends keyof typeof form>(key: K, value: typeof form[K]) {
@@ -82,6 +84,8 @@ export default function RegistrationForm() {
         mediaConsent:    form.mediaConsent,
         injuryWaiver:    form.injuryWaiver,
         noRefundAck:     form.noRefundAck,
+        printedName:     form.printedName,
+        signedDate:      form.signedDate,
       }),
     })
 
@@ -114,6 +118,9 @@ export default function RegistrationForm() {
           <Row label="Parent / Guardian" value={form.parentName} />
           <Row label="Email"            value={form.parentEmail} />
           <Row label="Phone"            value={form.parentPhone} />
+          <hr className="border-gray-200" />
+          <Row label="Printed Name"     value={form.printedName} />
+          <Row label="Signed Date"      value={form.signedDate} />
         </div>
 
         <div className="bg-white rounded-2xl p-5 ring-1 ring-black/5 space-y-2">
@@ -381,6 +388,30 @@ export default function RegistrationForm() {
             onChange={v => set('noRefundAck', v)}
             label="No Refund Policy — I understand all payments are final and non-refundable. (Required)"
           />
+        </div>
+      </fieldset>
+
+      <hr className="border-gray-100" />
+
+      {/* Signature */}
+      <fieldset>
+        <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Signature</legend>
+        <p className="text-xs text-gray-400 mb-3">By completing below you confirm all information is accurate and agree to the terms above.</p>
+        <div className="space-y-4">
+          <Field label="Printed Name" required>
+            <input
+              type="text" required placeholder="Full legal name"
+              value={form.printedName} onChange={e => set('printedName', e.target.value)}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Date" required>
+            <input
+              type="text" required placeholder="MM / DD / YYYY"
+              value={form.signedDate} onChange={e => set('signedDate', e.target.value)}
+              className={inputCls}
+            />
+          </Field>
         </div>
       </fieldset>
 

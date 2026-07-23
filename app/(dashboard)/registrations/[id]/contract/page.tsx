@@ -1,7 +1,6 @@
 import prisma from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import PrintButton from '@/components/registrations/print-button'
-import ContractSignature from '@/components/registrations/contract-signature'
 
 const PROGRAM_LABELS: Record<string, string> = {
   basketball_early_bird:   'Basketball — Early Bird',
@@ -148,8 +147,30 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
           </div>
         </div>
 
-        {/* ── Signature block (client component with fillable fields) ── */}
-        <ContractSignature />
+        {/* ── Signature block ── */}
+        <div className="mt-10 pt-8 border-t-2 border-gray-900">
+          <p className="text-xs text-gray-500 mb-6">
+            By signing below, the parent/guardian confirms all information above is accurate and agrees to all terms stated in this registration agreement.
+          </p>
+          <div className="grid grid-cols-2 gap-10 mb-6">
+            <div>
+              <div className="border-b-2 border-gray-900 h-14 mb-1" />
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Parent / Guardian Signature</p>
+            </div>
+            <div>
+              <div className="flex items-end border-b-2 border-gray-900 h-14 mb-1 pb-1">
+                <span className="text-base font-medium text-gray-900">{reg.signedDate ?? ''}</span>
+              </div>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Date</p>
+            </div>
+          </div>
+          <div>
+            <div className="flex items-end border-b-2 border-gray-900 h-14 mb-1 pb-1">
+              <span className="text-base font-medium text-gray-900">{reg.printedName ?? ''}</span>
+            </div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Printed Name</p>
+          </div>
+        </div>
 
         <p className="text-center text-[10px] text-gray-300 mt-12 tracking-wide">
           413 YOUTH CLUB · OAKLAND GARDENS, NY · 58-06 SPRINGFIELD BLVD
