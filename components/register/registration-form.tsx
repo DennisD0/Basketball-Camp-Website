@@ -37,7 +37,7 @@ export default function RegistrationForm() {
     childName:       '',
     ageGroup:        '',
     sportProgram:    '',   // combined sport+program key
-    packageOption:   '7-week',
+    packageOption:   '',   // must be explicitly chosen before pricing reveals
     mediaConsent:    false,
     injuryWaiver:    false,
     noRefundAck:     false,
@@ -228,41 +228,7 @@ export default function RegistrationForm() {
 
       <hr className="border-gray-100" />
 
-      {/* Sport + Pricing combined */}
-      <fieldset>
-        <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Sport & Registration Option</legend>
-        <p className="text-xs text-gray-400 mb-3">Choose your sport and pricing tier together</p>
-        <div className="space-y-2">
-          {SPORT_PROGRAMS.map(p => (
-            <label
-              key={p.value}
-              className={`flex items-center justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                form.sportProgram === p.value
-                  ? 'border-brand-teal bg-brand-teal/5'
-                  : 'border-gray-100 hover:border-gray-200'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <input
-                  type="radio" name="sportProgram" value={p.value} required
-                  checked={form.sportProgram === p.value}
-                  onChange={() => set('sportProgram', p.value)}
-                  className="accent-[#2C6E6A]"
-                />
-                <div>
-                  <span className="text-sm font-semibold text-gray-800">{p.label}</span>
-                  <p className="text-xs text-gray-400 mt-0.5">{p.sub}</p>
-                </div>
-              </div>
-              <span className="text-sm font-bold text-brand-teal flex-shrink-0">{p.price}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      <hr className="border-gray-100" />
-
-      {/* Package selection */}
+      {/* Package selection — always shown first */}
       <fieldset>
         <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Session Package</legend>
         <div className="space-y-2">
@@ -279,7 +245,7 @@ export default function RegistrationForm() {
                 <input
                   type="radio" name="package" value={p.value}
                   checked={form.packageOption === p.value}
-                  onChange={() => set('packageOption', p.value)}
+                  onChange={() => { set('packageOption', p.value); set('sportProgram', '') }}
                   className="accent-[#2C6E6A]"
                 />
                 <div>
@@ -292,6 +258,43 @@ export default function RegistrationForm() {
           ))}
         </div>
       </fieldset>
+
+      {/* Sport + Pricing — revealed only after package is chosen */}
+      <div className={`transition-all duration-300 overflow-hidden ${
+        form.packageOption ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+      }`}>
+        <hr className="border-gray-100 mb-6" />
+        <fieldset>
+          <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Sport & Registration Option</legend>
+          <p className="text-xs text-gray-400 mb-3">Choose your sport and pricing tier together</p>
+          <div className="space-y-2">
+            {SPORT_PROGRAMS.map(p => (
+              <label
+                key={p.value}
+                className={`flex items-center justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                  form.sportProgram === p.value
+                    ? 'border-brand-teal bg-brand-teal/5'
+                    : 'border-gray-100 hover:border-gray-200'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <input
+                    type="radio" name="sportProgram" value={p.value} required={!!form.packageOption}
+                    checked={form.sportProgram === p.value}
+                    onChange={() => set('sportProgram', p.value)}
+                    className="accent-[#2C6E6A]"
+                  />
+                  <div>
+                    <span className="text-sm font-semibold text-gray-800">{p.label}</span>
+                    <p className="text-xs text-gray-400 mt-0.5">{p.sub}</p>
+                  </div>
+                </div>
+                <span className="text-sm font-bold text-brand-teal flex-shrink-0">{p.price}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </div>
 
       <hr className="border-gray-100" />
 
