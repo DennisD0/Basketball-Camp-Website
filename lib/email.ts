@@ -25,9 +25,6 @@ export async function sendComposedEmail({
   to: string; guardianName: string; subject: string; body: string
 }) {
   if (!process.env.RESEND_API_KEY) {
-    console.log(`[Email mock] To: ${to}`)
-    console.log(`[Email mock] Subject: ${subject}`)
-    console.log(`[Email mock] Body:\n${body}`)
     return { id: 'mock' }
   }
 

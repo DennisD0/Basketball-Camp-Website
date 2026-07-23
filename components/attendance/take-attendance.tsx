@@ -2,18 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { avatarColor } from '@/lib/avatar'
 
 type Member = { id: string; firstName: string; lastName: string; teamAssignment: string | null }
-
-const AVATAR_COLORS = [
-  'bg-brand-navy', 'bg-brand-teal', 'bg-purple-600', 'bg-blue-600',
-  'bg-indigo-600', 'bg-emerald-600',
-]
-function avatarColor(name: string) {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
-}
 
 export default function TakeAttendance({ date, members }: { date: string; members: Member[] }) {
   const router = useRouter()

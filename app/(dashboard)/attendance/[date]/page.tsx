@@ -2,22 +2,12 @@ import prisma from '@/lib/prisma'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import TakeAttendance from '@/components/attendance/take-attendance'
+import { avatarColor } from '@/lib/avatar'
 
 function sessionColor(remaining: number) {
   if (remaining === 0) return { bar: 'bg-red-400', text: 'text-red-500', badge: 'bg-red-50 text-red-600' }
   if (remaining <= 2) return { bar: 'bg-orange-400', text: 'text-orange-500', badge: 'bg-orange-50 text-orange-600' }
   return { bar: 'bg-brand-teal', text: 'text-brand-teal', badge: 'bg-brand-teal/10 text-brand-teal' }
-}
-
-const AVATAR_COLORS = [
-  'bg-brand-navy', 'bg-brand-teal', 'bg-purple-600', 'bg-blue-600',
-  'bg-indigo-600', 'bg-emerald-600',
-]
-
-function avatarColor(name: string) {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
 }
 
 export default async function AttendanceDatePage({

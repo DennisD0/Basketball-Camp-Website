@@ -1,28 +1,11 @@
 import prisma from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import PrintButton from '@/components/registrations/print-button'
-
-const PROGRAM_LABELS: Record<string, string> = {
-  basketball_early_bird:   'Basketball — Early Bird',
-  basketball_memorial_day: 'Basketball — Best Deal',
-  basketball_regular:      'Basketball — Standard',
-  volleyball_early_bird:   'Volleyball — Early Bird',
-  volleyball_memorial_day: 'Volleyball — Best Deal',
-  volleyball_regular:      'Volleyball — Standard',
-}
+import { PROGRAM_LABELS, PROGRAM_PRICES } from '@/lib/programs'
 
 const PACKAGE_LABELS: Record<string, { label: string; sessions: number; window: string }> = {
   '5-week': { label: '5-Week Package', sessions: 5, window: '7 weeks' },
   '7-week': { label: '7-Week Package', sessions: 7, window: '9 weeks' },
-}
-
-const PRICING: Record<string, string> = {
-  basketball_early_bird:   '$350',
-  basketball_memorial_day: '$300',
-  basketball_regular:      '$400',
-  volleyball_early_bird:   '$350',
-  volleyball_memorial_day: '$300',
-  volleyball_regular:      '$400',
 }
 
 export default async function ContractPage({ params }: { params: Promise<{ id: string }> }) {
@@ -36,7 +19,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
 
   const pkg = PACKAGE_LABELS[reg.packageOption] ?? { label: reg.packageOption, sessions: '—', window: '—' }
   const programLabel = PROGRAM_LABELS[reg.programOption] ?? reg.programOption
-  const price = PRICING[reg.programOption] ?? '—'
+  const price = PROGRAM_PRICES[reg.programOption] ?? '—'
   const invoiceNum = `413-${reg.id.slice(-6).toUpperCase()}`
 
   return (

@@ -34,18 +34,7 @@ export async function GET(request: NextRequest) {
 
       const sessions = await prisma.session.findMany({
         where: { date: { gte: day, lt: nextDay } },
-        include: {
-          attendance: {
-            where: { status: 'PRESENT' },
-            include: {
-              member: {
-                include: {
-                  _count: { select: { attendance: { where: { status: 'PRESENT' } } } },
-                },
-              },
-            },
-          },
-        },
+        select: { id: true, date: true, type: true },
       })
 
       return NextResponse.json({ sessions })
