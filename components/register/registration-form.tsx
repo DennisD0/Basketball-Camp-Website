@@ -238,30 +238,38 @@ export default function RegistrationForm() {
       <fieldset>
         <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Session Package</legend>
         <div className="space-y-2">
-          {PACKAGES.map(p => (
-            <label
-              key={p.value}
-              className={`flex items-center justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                form.packageOption === p.value
-                  ? 'border-brand-teal bg-brand-teal/5'
-                  : 'border-gray-100 hover:border-gray-200'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <input
-                  type="radio" name="package" value={p.value}
-                  checked={form.packageOption === p.value}
-                  onChange={() => { set('packageOption', p.value); set('sport', ''); set('pricingTier', '') }}
-                  className="accent-[#2C6E6A]"
-                />
-                <div>
-                  <span className="text-sm font-semibold text-gray-800">{p.label}</span>
-                  <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>
+          {PACKAGES.map(p => {
+            const selected = form.packageOption === p.value
+            return (
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => {
+                  if (selected) {
+                    set('packageOption', ''); set('sport', ''); set('pricingTier', '')
+                  } else {
+                    set('packageOption', p.value); set('sport', ''); set('pricingTier', '')
+                  }
+                }}
+                className={`w-full flex items-center justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all text-left active:scale-[0.98] ${
+                  selected ? 'border-brand-teal bg-brand-teal/5' : 'border-gray-100 hover:border-gray-200'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+                    selected ? 'border-brand-teal' : 'border-gray-300'
+                  }`}>
+                    {selected && <span className="w-2 h-2 rounded-full bg-brand-teal" />}
+                  </span>
+                  <div>
+                    <span className="text-sm font-semibold text-gray-800">{p.label}</span>
+                    <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>
+                  </div>
                 </div>
-              </div>
-              <span className="text-xs font-bold text-brand-teal flex-shrink-0">{p.sessions} classes</span>
-            </label>
-          ))}
+                <span className="text-xs font-bold text-brand-teal flex-shrink-0">{p.sessions} classes</span>
+              </button>
+            )
+          })}
         </div>
       </fieldset>
 
@@ -273,24 +281,32 @@ export default function RegistrationForm() {
         <fieldset>
           <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Sport</legend>
           <div className="space-y-2">
-            {SPORTS.map(s => (
-              <label
-                key={s}
-                className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  form.sport === s
-                    ? 'border-brand-teal bg-brand-teal/5'
-                    : 'border-gray-100 hover:border-gray-200'
-                }`}
-              >
-                <input
-                  type="radio" name="sport" value={s} required={!!form.packageOption}
-                  checked={form.sport === s}
-                  onChange={() => { set('sport', s); set('pricingTier', '') }}
-                  className="accent-[#2C6E6A]"
-                />
-                <span className="text-sm font-semibold text-gray-800">{s}</span>
-              </label>
-            ))}
+            {SPORTS.map(s => {
+              const selected = form.sport === s
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    if (selected) {
+                      set('sport', ''); set('pricingTier', '')
+                    } else {
+                      set('sport', s); set('pricingTier', '')
+                    }
+                  }}
+                  className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all text-left active:scale-[0.98] ${
+                    selected ? 'border-brand-teal bg-brand-teal/5' : 'border-gray-100 hover:border-gray-200'
+                  }`}
+                >
+                  <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+                    selected ? 'border-brand-teal' : 'border-gray-300'
+                  }`}>
+                    {selected && <span className="w-2 h-2 rounded-full bg-brand-teal" />}
+                  </span>
+                  <span className="text-sm font-semibold text-gray-800">{s}</span>
+                </button>
+              )
+            })}
           </div>
         </fieldset>
       </div>
@@ -304,22 +320,23 @@ export default function RegistrationForm() {
           <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Pricing Option</legend>
           <p className="text-xs text-gray-400 mb-3">Select the pricing tier that applies to you</p>
           <div className="space-y-2">
-            {PRICING_TIERS.map(t => (
-              <label
+            {PRICING_TIERS.map(t => {
+              const selected = form.pricingTier === t.value
+              return (
+              <button
                 key={t.value}
-                className={`flex items-center justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  form.pricingTier === t.value
-                    ? 'border-brand-teal bg-brand-teal/5'
-                    : 'border-gray-100 hover:border-gray-200'
+                type="button"
+                onClick={() => set('pricingTier', selected ? '' : t.value)}
+                className={`w-full flex items-center justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all text-left active:scale-[0.98] ${
+                  selected ? 'border-brand-teal bg-brand-teal/5' : 'border-gray-100 hover:border-gray-200'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <input
-                    type="radio" name="pricingTier" value={t.value} required={!!form.sport}
-                    checked={form.pricingTier === t.value}
-                    onChange={() => set('pricingTier', t.value)}
-                    className="accent-[#2C6E6A]"
-                  />
+                  <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+                    selected ? 'border-brand-teal' : 'border-gray-300'
+                  }`}>
+                    {selected && <span className="w-2 h-2 rounded-full bg-brand-teal" />}
+                  </span>
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-gray-800">{t.label}</span>
@@ -333,8 +350,9 @@ export default function RegistrationForm() {
                   </div>
                 </div>
                 <span className="text-sm font-bold text-brand-teal flex-shrink-0">{t.price}</span>
-              </label>
-            ))}
+              </button>
+              )
+            })}
           </div>
         </fieldset>
       </div>
