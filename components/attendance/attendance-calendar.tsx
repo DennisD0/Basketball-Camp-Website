@@ -116,7 +116,7 @@ export default function AttendanceCalendar({ initialYear, initialMonth }: Props)
               return (
                 <button
                   key={i}
-                  onClick={() => router.push(`/attendance/${ds}`)}
+                  onClick={() => router.push(`/attendance/${ds}?tab=take`)}
                   className={[
                     'relative aspect-square flex flex-col items-center justify-center rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 active:scale-95 cursor-pointer',
                     isToday ? 'ring-2 ring-brand-navy ring-offset-1' : '',
