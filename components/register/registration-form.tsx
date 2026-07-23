@@ -2,14 +2,18 @@
 
 import { useState } from 'react'
 
-const SPORT_PROGRAMS = [
-  { value: 'basketball_early_bird',   sport: 'Basketball', label: 'Basketball — Early Bird',        price: '$350', sub: 'by June 6' },
-  { value: 'basketball_memorial_day', sport: 'Basketball', label: 'Basketball — Memorial Day Sale', price: '$300', sub: 'by May 31' },
-  { value: 'basketball_regular',      sport: 'Basketball', label: 'Basketball — Regular',           price: '$400', sub: 'by July 5' },
-  { value: 'volleyball_early_bird',   sport: 'Volleyball', label: 'Volleyball — Early Bird',        price: '$350', sub: 'by June 6' },
-  { value: 'volleyball_memorial_day', sport: 'Volleyball', label: 'Volleyball — Memorial Day Sale', price: '$300', sub: 'by May 31' },
-  { value: 'volleyball_regular',      sport: 'Volleyball', label: 'Volleyball — Regular',           price: '$400', sub: 'by July 5' },
+const SPORTS = ['Basketball', 'Volleyball']
+
+const PRICING_TIERS = [
+  { value: 'early_bird',   label: 'Early Bird',   price: '$350', sub: 'Register by June 6',  badge: 'Save $50' },
+  { value: 'memorial_day', label: 'Best Deal',    price: '$300', sub: 'Register by May 31',  badge: 'Save $100' },
+  { value: 'regular',      label: 'Standard',     price: '$400', sub: 'Register by July 5',  badge: null },
 ]
+
+// Combined key used for API + contract display
+function sportProgramKey(sport: string, tier: string) {
+  return `${sport.toLowerCase()}_${tier}`
+}
 
 const PACKAGES = [
   { value: '5-week', label: '5-Week Package', sessions: 5, windowWeeks: 7, description: '5 classes · complete within 7 weeks' },
@@ -36,7 +40,8 @@ export default function RegistrationForm() {
     whatsappConsent: false,
     childName:       '',
     ageGroup:        '',
-    sportProgram:    '',   // combined sport+program key
+    sport:           '',   // Basketball | Volleyball
+    pricingTier:     '',   // early_bird | memorial_day | regular
     packageOption:   '',   // must be explicitly chosen before pricing reveals
     mediaConsent:    false,
     injuryWaiver:    false,
@@ -58,8 +63,8 @@ export default function RegistrationForm() {
     setLoading(true)
     setError('')
 
-    const selected = SPORT_PROGRAMS.find(p => p.value === form.sportProgram)
     const ageValue = form.ageGroup.split(' ')[0]
+    const programOption = sportProgramKey(form.sport, form.pricingTier)
 
     const res = await fetch('/api/register', {
       method: 'POST',
@@ -71,8 +76,8 @@ export default function RegistrationForm() {
         whatsappConsent: form.whatsappConsent,
         childName:       form.childName,
         ageGroup:        ageValue,
-        sport:           selected?.sport ?? '',
-        programOption:   form.sportProgram,
+        sport:           form.sport,
+        programOption,
         packageOption:   form.packageOption,
         mediaConsent:    form.mediaConsent,
         injuryWaiver:    form.injuryWaiver,
@@ -91,7 +96,7 @@ export default function RegistrationForm() {
   }
 
   if (step === 'confirm') {
-    const selected = SPORT_PROGRAMS.find(p => p.value === form.sportProgram)
+    const tier = PRICING_TIERS.find(t => t.value === form.pricingTier)
     const pkg = PACKAGES.find(p => p.value === form.packageOption)
     return (
       <div className="space-y-6">
@@ -103,7 +108,8 @@ export default function RegistrationForm() {
         <div className="bg-[#F4F2EE] rounded-2xl p-5 space-y-3">
           <Row label="Child's Name"     value={form.childName} />
           <Row label="Age Group"        value={form.ageGroup} />
-          <Row label="Sport & Program"  value={selected ? `${selected.label} (${selected.price})` : form.sportProgram} />
+          <Row label="Sport"            value={form.sport} />
+          <Row label="Pricing Option"   value={tier ? `${tier.label} (${tier.price})` : form.pricingTier} />
           <Row label="Package"          value={pkg ? `${pkg.label} — ${pkg.sessions} classes` : form.packageOption} />
           <Row label="Parent / Guardian" value={form.parentName} />
           <Row label="Email"            value={form.parentEmail} />
@@ -245,7 +251,7 @@ export default function RegistrationForm() {
                 <input
                   type="radio" name="package" value={p.value}
                   checked={form.packageOption === p.value}
-                  onChange={() => { set('packageOption', p.value); set('sportProgram', '') }}
+                  onChange={() => { set('packageOption', p.value); set('sport', ''); set('pricingTier', '') }}
                   className="accent-[#2C6E6A]"
                 />
                 <div>
@@ -259,37 +265,74 @@ export default function RegistrationForm() {
         </div>
       </fieldset>
 
-      {/* Sport + Pricing — revealed only after package is chosen */}
+      {/* Sport — revealed after package chosen */}
       <div className={`transition-all duration-300 overflow-hidden ${
-        form.packageOption ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+        form.packageOption ? 'max-h-[400px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
       }`}>
         <hr className="border-gray-100 mb-6" />
         <fieldset>
-          <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Sport & Registration Option</legend>
-          <p className="text-xs text-gray-400 mb-3">Choose your sport and pricing tier together</p>
+          <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Sport</legend>
           <div className="space-y-2">
-            {SPORT_PROGRAMS.map(p => (
+            {SPORTS.map(s => (
               <label
-                key={p.value}
+                key={s}
+                className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                  form.sport === s
+                    ? 'border-brand-teal bg-brand-teal/5'
+                    : 'border-gray-100 hover:border-gray-200'
+                }`}
+              >
+                <input
+                  type="radio" name="sport" value={s} required={!!form.packageOption}
+                  checked={form.sport === s}
+                  onChange={() => { set('sport', s); set('pricingTier', '') }}
+                  className="accent-[#2C6E6A]"
+                />
+                <span className="text-sm font-semibold text-gray-800">{s}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </div>
+
+      {/* Pricing tier — revealed after sport chosen */}
+      <div className={`transition-all duration-300 overflow-hidden ${
+        form.sport ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+      }`}>
+        <hr className="border-gray-100 mb-6" />
+        <fieldset>
+          <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Pricing Option</legend>
+          <p className="text-xs text-gray-400 mb-3">Select the pricing tier that applies to you</p>
+          <div className="space-y-2">
+            {PRICING_TIERS.map(t => (
+              <label
+                key={t.value}
                 className={`flex items-center justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  form.sportProgram === p.value
+                  form.pricingTier === t.value
                     ? 'border-brand-teal bg-brand-teal/5'
                     : 'border-gray-100 hover:border-gray-200'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <input
-                    type="radio" name="sportProgram" value={p.value} required={!!form.packageOption}
-                    checked={form.sportProgram === p.value}
-                    onChange={() => set('sportProgram', p.value)}
+                    type="radio" name="pricingTier" value={t.value} required={!!form.sport}
+                    checked={form.pricingTier === t.value}
+                    onChange={() => set('pricingTier', t.value)}
                     className="accent-[#2C6E6A]"
                   />
                   <div>
-                    <span className="text-sm font-semibold text-gray-800">{p.label}</span>
-                    <p className="text-xs text-gray-400 mt-0.5">{p.sub}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-800">{t.label}</span>
+                      {t.badge && (
+                        <span className="text-[10px] font-bold text-brand-teal bg-brand-teal/10 px-1.5 py-0.5 rounded-full">
+                          {t.badge}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">{t.sub}</p>
                   </div>
                 </div>
-                <span className="text-sm font-bold text-brand-teal flex-shrink-0">{p.price}</span>
+                <span className="text-sm font-bold text-brand-teal flex-shrink-0">{t.price}</span>
               </label>
             ))}
           </div>
