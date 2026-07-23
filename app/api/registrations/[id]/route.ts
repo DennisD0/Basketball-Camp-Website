@@ -21,7 +21,6 @@ Location: 58-06 Springfield Blvd, Oakland Gardens, NY
 
 Payment Instructions
 Zelle: 347-200-4439
-Venmo: @benro97
 Please include ${reg.childName}'s name in the memo. No spot is held until payment is received.
 
 We can't wait to see ${reg.childName} on the court!

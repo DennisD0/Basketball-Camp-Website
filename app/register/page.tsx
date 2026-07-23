@@ -25,7 +25,6 @@ export default function RegisterPage() {
             <h3 className="font-semibold text-brand-navy mb-3">Payment</h3>
             <ul className="space-y-2 text-sm text-gray-600">
               <li>Zelle: <span className="font-medium text-gray-800">347-200-4439</span></li>
-              <li>Venmo: <span className="font-medium text-gray-800">@benro97</span></li>
               <li className="text-xs text-gray-400 pt-1">Include child's name in memo</li>
             </ul>
           </div>

@@ -127,7 +127,6 @@ export default function RegistrationForm() {
         <div className="bg-brand-teal/5 rounded-2xl p-5 ring-1 ring-brand-teal/20">
           <p className="text-xs font-semibold text-brand-teal uppercase tracking-wider mb-2">Payment Instructions</p>
           <p className="text-sm text-gray-600">Zelle: <span className="font-semibold text-gray-800">347-200-4439</span></p>
-          <p className="text-sm text-gray-600">Venmo: <span className="font-semibold text-gray-800">@benro97</span></p>
           <p className="text-xs text-gray-400 mt-2">Include your child's name in the memo. No spot is held until payment is received.</p>
         </div>
 
@@ -167,7 +166,6 @@ export default function RegistrationForm() {
         <div className="bg-[#F4F2EE] rounded-2xl p-5 text-left max-w-sm mx-auto">
           <p className="text-sm font-semibold text-gray-700 mb-2">Payment Instructions</p>
           <p className="text-sm text-gray-500">Zelle: <span className="font-medium text-gray-800">347-200-4439</span></p>
-          <p className="text-sm text-gray-500">Venmo: <span className="font-medium text-gray-800">@benro97</span></p>
           <p className="text-xs text-gray-400 mt-2">Include your child's name in the memo.</p>
         </div>
       </div>

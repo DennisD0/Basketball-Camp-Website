@@ -129,9 +129,8 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
         {/* ── Payment Instructions ── */}
         <div className="bg-gray-50 rounded-xl p-5 mb-8">
           <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Instructions</p>
-          <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="text-sm">
             <div><span className="text-gray-500">Zelle</span> <span className="font-semibold ml-2">347-200-4439</span></div>
-            <div><span className="text-gray-500">Venmo</span> <span className="font-semibold ml-2">@benro97</span></div>
           </div>
           <p className="text-xs text-gray-400 mt-2">Include child&apos;s name in the memo. No spot is held until payment is received.</p>
         </div>

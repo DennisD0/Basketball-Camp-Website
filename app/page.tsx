@@ -364,7 +364,7 @@ export default function LandingPage() {
                   {[
                     { label: 'Location', value: '58-06 Springfield Blvd', sub: 'Oakland Gardens, NY · Free parking' },
                     { label: 'Dates', value: 'July 6 – August 1, 2026', sub: '4-week summer program' },
-                    { label: 'Payment', value: 'Zelle 347-200-4439', sub: 'Venmo @benro97 · include child\'s name' },
+                    { label: 'Payment', value: 'Zelle 347-200-4439', sub: 'Include child\'s name in memo' },
                   ].map(({ label, value, sub }) => (
                     <div key={label} className="bg-white rounded-2xl px-5 py-4 ring-1 ring-brand-navy/5">
                       <p className="text-xs text-brand-navy/40 font-medium uppercase tracking-wider mb-1">{label}</p>
@@ -475,7 +475,7 @@ export default function LandingPage() {
               { q: 'Do kids pick one sport, or can they do both?', a: 'Sessions run both sports on the same schedule. Register for the one you want — or both, if you\'d like.' },
               { q: 'What skill level is this for?', a: 'All levels. From beginners to players trying to make their school team. Coach Ben adjusts drills per player.' },
               { q: 'What if my child misses a session?', a: 'No make-ups, but Coach Ben will catch them up at the next session personally.' },
-              { q: 'How do I pay?', a: 'Zelle to 347-200-4439 or Venmo to @benro97. Include your child\'s name in the memo. Payment confirms the spot.' },
+              { q: 'How do I pay?', a: 'Zelle to 347-200-4439. Include your child\'s name in the memo. Payment confirms the spot.' },
               { q: 'Is there a refund policy?', a: 'No refunds after payment. For injury situations, contact us directly — we\'ll work something out.' },
             ].map(({ q, a }, i) => (
               <AnimateIn key={q} delay={i * 50}>

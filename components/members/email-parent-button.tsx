@@ -30,7 +30,6 @@ Monthly fee: $50
 Accepted methods: Cash (at next session) or Bank Transfer
 
 Zelle: 347-200-4439
-Venmo: @benro97
 (Please include your child's name in the memo.)
 
 If you have any questions about your balance or payment options, please reply to this email.
