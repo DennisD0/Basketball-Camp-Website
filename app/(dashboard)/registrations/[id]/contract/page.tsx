@@ -26,12 +26,26 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
     <>
       <style>{`
         @media print {
-          .no-print { display: none !important; }
-          body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          @page { margin: 0.75in; }
+          /* Hide all dashboard chrome */
+          nav, .no-print { display: none !important; }
+
+          /* White page, no margin bleed */
+          *, body, html { background: white !important; }
+          body { margin: 0 !important; }
+
+          /* Strip the dashboard layout wrapper constraints */
+          .min-h-screen { background: white !important; min-height: unset !important; }
+          main { max-width: none !important; padding: 0 !important; margin: 0 !important; }
+
+          /* Contract content fills the page */
+          .contract-body { max-width: none !important; padding: 0 !important; }
+
+          /* Colour-accurate backgrounds (Bill To box, etc.) */
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+
+          @page { margin: 0.65in; size: letter; }
         }
-        .print-input { border: none !important; background: transparent !important; }
-        .print-input::placeholder { color: transparent !important; }
       `}</style>
 
       {/* Toolbar — hidden on print */}
@@ -41,7 +55,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
       </div>
 
       {/* Invoice body */}
-      <div className="max-w-2xl mx-auto px-8 py-10 font-sans text-gray-900">
+      <div className="contract-body max-w-2xl mx-auto px-8 py-10 font-sans text-gray-900">
 
         {/* ── Header ── */}
         <div className="flex items-start justify-between mb-10">
