@@ -61,9 +61,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   if (!(await requireAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { date, memberIds } = await request.json()
-  if (!date || !Array.isArray(memberIds)) {
-    return NextResponse.json({ error: 'date and memberIds required' }, { status: 400 })
+  const { date, presentIds, allMemberIds } = await request.json()
+  if (!date || !Array.isArray(presentIds) || !Array.isArray(allMemberIds)) {
+    return NextResponse.json({ error: 'date, presentIds and allMemberIds required' }, { status: 400 })
+  }
+
+  // Don't create a session if nobody is being recorded at all
+  if (allMemberIds.length === 0) {
+    return NextResponse.json({ ok: true, skipped: true })
   }
 
   try {
@@ -75,12 +80,14 @@ export async function POST(request: NextRequest) {
       create: { type: 'PRACTICE', date: sessionDate },
     })
 
+    const presentSet = new Set(presentIds)
+
     await Promise.all(
-      memberIds.map(memberId =>
+      allMemberIds.map((memberId: string) =>
         prisma.attendance.upsert({
           where: { memberId_sessionId: { memberId, sessionId: session.id } },
-          update: { status: 'PRESENT' },
-          create: { memberId, sessionId: session.id, status: 'PRESENT' },
+          update: { status: presentSet.has(memberId) ? 'PRESENT' : 'ABSENT' },
+          create: { memberId, sessionId: session.id, status: presentSet.has(memberId) ? 'PRESENT' : 'ABSENT' },
         })
       )
     )

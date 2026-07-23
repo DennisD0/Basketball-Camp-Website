@@ -10,8 +10,11 @@ export async function POST(req: NextRequest) {
     packageOption, printedName, signedDate,
   } = body
 
-  if (!parentName || !parentEmail || !parentPhone || !childName || !programOption || !sport || !ageGroup) {
+  if (!parentName || !parentEmail || !parentPhone || !childName || !sport || !ageGroup) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+  }
+  if (!programOption || programOption === '_') {
+    return NextResponse.json({ error: 'Please select a valid sport and pricing option' }, { status: 400 })
   }
   if (!injuryWaiver || !noRefundAck) {
     return NextResponse.json({ error: 'You must agree to the waiver and refund policy' }, { status: 400 })

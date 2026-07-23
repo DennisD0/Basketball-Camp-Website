@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 type Member = { id: string; firstName: string; lastName: string; teamAssignment: string | null }
 
@@ -15,6 +16,7 @@ function avatarColor(name: string) {
 }
 
 export default function TakeAttendance({ date, members }: { date: string; members: Member[] }) {
+  const router = useRouter()
   const [present, setPresent] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -35,11 +37,17 @@ export default function TakeAttendance({ date, members }: { date: string; member
     const res = await fetch('/api/attendance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, memberIds: Array.from(present) }),
+      body: JSON.stringify({
+        date,
+        presentIds: Array.from(present),
+        allMemberIds: members.map(m => m.id),
+      }),
     })
     setSaving(false)
     if (res.ok) {
       setSaved(true)
+      // Refresh server data so View tab reflects the save
+      router.refresh()
     } else {
       setError('Failed to save — please try again.')
     }

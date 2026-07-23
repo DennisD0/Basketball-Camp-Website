@@ -57,6 +57,9 @@ export default function RegistrationForm() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    if (!form.packageOption) { setError('Please select a session package.'); return }
+    if (!form.sport) { setError('Please select a sport.'); return }
+    if (!form.pricingTier) { setError('Please select a pricing option.'); return }
     window.scrollTo({ top: 0, behavior: 'smooth' })
     setStep('confirm')
   }
