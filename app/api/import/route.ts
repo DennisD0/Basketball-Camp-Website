@@ -47,7 +47,16 @@ async function runImport(request: NextRequest) {
   // memberKey → member id
   const memberKeyToId: Record<string, string> = {}
 
-  const validRows = (memberRows ?? []).filter((r: { firstName?: string }) => r.firstName?.trim())
+  // Deduplicate input rows by key — first occurrence wins.
+  // Prevents concurrent creates when the same name appears twice in one payload.
+  const seen = new Set<string>()
+  const validRows = (memberRows ?? []).filter((r: { firstName?: string; lastName?: string }) => {
+    if (!r.firstName?.trim()) return false
+    const k = `${r.firstName.trim()} ${(r.lastName ?? '').trim()}`.trim().toLowerCase()
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
 
   // --- Fetch all existing members in one query ---
   const existingMembers = await prisma.member.findMany({
