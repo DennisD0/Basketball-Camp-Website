@@ -50,10 +50,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await requireAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
+  const hard = req.nextUrl.searchParams.get('hard') === 'true'
   try {
+    if (hard) {
+      await prisma.attendance.deleteMany({ where: { memberId: id } })
+      await prisma.notification.deleteMany({ where: { memberId: id } })
+      await prisma.payment.deleteMany({ where: { memberId: id } })
+      await prisma.member.delete({ where: { id } })
+      return NextResponse.json({ ok: true })
+    }
     const member = await prisma.member.update({
       where: { id },
       data: { status: 'ARCHIVED', archivedAt: new Date() },

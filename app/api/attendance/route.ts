@@ -47,6 +47,54 @@ export async function GET(request: NextRequest) {
   }
 }
 
+export async function DELETE(request: NextRequest) {
+  if (!(await requireAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { searchParams } = request.nextUrl
+  const month = searchParams.get('month')
+  const date = searchParams.get('date')
+
+  try {
+    let sessionIds: string[] = []
+
+    if (month) {
+      const [year, mon] = month.split('-').map(Number)
+      const start = new Date(year, mon - 1, 1)
+      const end = new Date(year, mon, 1)
+      const sessions = await prisma.session.findMany({
+        where: { date: { gte: start, lt: end } },
+        select: { id: true },
+      })
+      sessionIds = sessions.map(s => s.id)
+    } else if (date) {
+      const day = new Date(date + 'T00:00:00Z')
+      const nextDay = new Date(day)
+      nextDay.setUTCDate(nextDay.getUTCDate() + 1)
+      const sessions = await prisma.session.findMany({
+        where: { date: { gte: day, lt: nextDay } },
+        select: { id: true },
+      })
+      sessionIds = sessions.map(s => s.id)
+    } else {
+      return NextResponse.json({ error: 'Provide month or date param' }, { status: 400 })
+    }
+
+    if (sessionIds.length === 0) {
+      return NextResponse.json({ sessionsDeleted: 0, attendanceDeleted: 0 })
+    }
+
+    const { count: attendanceDeleted } = await prisma.attendance.deleteMany({
+      where: { sessionId: { in: sessionIds } },
+    })
+    await prisma.session.deleteMany({ where: { id: { in: sessionIds } } })
+
+    return NextResponse.json({ sessionsDeleted: sessionIds.length, attendanceDeleted })
+  } catch (err) {
+    console.error('[attendance/delete]', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
+
 export async function POST(request: NextRequest) {
   if (!(await requireAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

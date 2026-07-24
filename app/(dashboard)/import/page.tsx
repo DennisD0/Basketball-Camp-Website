@@ -131,6 +131,14 @@ export default function ImportPage() {
   const [showResetModal, setShowResetModal] = useState(false)
   const [resetStatus, setResetStatus] = useState<'idle' | 'deleting' | 'done' | 'error'>('idle')
 
+  // Delete by period
+  const [periodMode, setPeriodMode] = useState<'month' | 'date'>('month')
+  const [periodValue, setPeriodValue] = useState('')
+  const [periodPreview, setPeriodPreview] = useState<{ sessions: number; attendance: number } | null>(null)
+  const [periodPreviewStatus, setPeriodPreviewStatus] = useState<'idle' | 'loading' | 'loaded' | 'empty' | 'error'>('idle')
+  const [showPeriodModal, setShowPeriodModal] = useState(false)
+  const [periodDeleteStatus, setPeriodDeleteStatus] = useState<'idle' | 'deleting' | 'error'>('idle')
+
   function handleFile(file: File) {
     setFileName(file.name)
     setStatus('idle')
@@ -183,6 +191,42 @@ export default function ImportPage() {
     }
   }
 
+  async function handlePeriodPreview() {
+    if (!periodValue) return
+    setPeriodPreviewStatus('loading')
+    setPeriodPreview(null)
+    try {
+      const param = periodMode === 'month' ? `month=${periodValue}` : `date=${periodValue}`
+      const res = await fetch(`/api/attendance?${param}`)
+      const data = await res.json()
+      // GET returns either { dates: [...] } for month or { sessions: [...] } for date
+      const sessionCount: number = (data.dates ?? data.sessions ?? []).length
+      if (sessionCount === 0) { setPeriodPreviewStatus('empty'); return }
+      setPeriodPreview({ sessions: sessionCount, attendance: -1 })
+      setPeriodPreviewStatus('loaded')
+    } catch {
+      setPeriodPreviewStatus('error')
+    }
+  }
+
+  async function handlePeriodDelete() {
+    if (!periodValue) return
+    setPeriodDeleteStatus('deleting')
+    try {
+      const param = periodMode === 'month' ? `month=${periodValue}` : `date=${periodValue}`
+      const res = await fetch(`/api/attendance?${param}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) { setPeriodDeleteStatus('error'); return }
+      setShowPeriodModal(false)
+      setPeriodPreview({ sessions: data.sessionsDeleted, attendance: data.attendanceDeleted })
+      setPeriodPreviewStatus('loaded')
+      setPeriodValue('')
+      setPeriodDeleteStatus('idle')
+    } catch {
+      setPeriodDeleteStatus('error')
+    }
+  }
+
   async function handleReset() {
     setResetStatus('deleting')
     try {
@@ -223,6 +267,79 @@ export default function ImportPage() {
           </svg>
           Reset All Data
         </button>
+      </div>
+
+      {/* Delete by Period */}
+      <div className="bg-white rounded-2xl shadow-sm ring-1 ring-black/5 mb-4 overflow-hidden">
+        <div className="px-4 pt-4 pb-3 border-b border-gray-50">
+          <p className="text-sm font-semibold text-gray-800">Delete by Period</p>
+          <p className="text-xs text-gray-400 mt-0.5">Remove all sessions and attendance records for a specific month or date.</p>
+        </div>
+        <div className="p-4 space-y-3">
+          {/* Mode tabs */}
+          <div className="flex gap-2">
+            {(['month', 'date'] as const).map(m => (
+              <button
+                key={m}
+                onClick={() => { setPeriodMode(m); setPeriodValue(''); setPeriodPreview(null); setPeriodPreviewStatus('idle') }}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  periodMode === m ? 'bg-brand-navy text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                By {m === 'month' ? 'Month' : 'Date'}
+              </button>
+            ))}
+          </div>
+
+          {/* Picker + preview button */}
+          <div className="flex items-center gap-2">
+            <input
+              type={periodMode}
+              value={periodValue}
+              onChange={e => { setPeriodValue(e.target.value); setPeriodPreview(null); setPeriodPreviewStatus('idle') }}
+              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-teal/30"
+            />
+            <button
+              onClick={handlePeriodPreview}
+              disabled={!periodValue || periodPreviewStatus === 'loading'}
+              className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-all disabled:opacity-40"
+            >
+              {periodPreviewStatus === 'loading' ? 'Loading…' : 'Preview'}
+            </button>
+          </div>
+
+          {/* Preview result */}
+          {periodPreviewStatus === 'empty' && (
+            <p className="text-xs text-gray-400">No sessions found for that {periodMode}.</p>
+          )}
+          {periodPreviewStatus === 'error' && (
+            <p className="text-xs text-red-500">Could not load preview. Check your connection.</p>
+          )}
+          {periodPreviewStatus === 'loaded' && periodPreview && periodPreview.sessions > 0 && (
+            <div className="flex items-center justify-between bg-red-50 rounded-xl px-3 py-2.5">
+              <div>
+                {periodPreview.attendance >= 0 ? (
+                  <p className="text-xs font-semibold text-red-700">
+                    Deleted {periodPreview.sessions} session{periodPreview.sessions !== 1 ? 's' : ''} · {periodPreview.attendance} attendance record{periodPreview.attendance !== 1 ? 's' : ''}
+                  </p>
+                ) : (
+                  <p className="text-xs font-semibold text-red-700">
+                    {periodPreview.sessions} session{periodPreview.sessions !== 1 ? 's' : ''} will be deleted
+                  </p>
+                )}
+                <p className="text-[11px] text-red-400 mt-0.5">All attendance records for these sessions will also be removed.</p>
+              </div>
+              {periodPreview.attendance < 0 && (
+                <button
+                  onClick={() => { setShowPeriodModal(true); setPeriodDeleteStatus('idle') }}
+                  className="flex-shrink-0 ml-3 px-3 py-1.5 text-xs font-semibold bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all active:scale-95"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Year selector */}
@@ -335,6 +452,49 @@ export default function ImportPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Period delete confirmation modal */}
+      {showPeriodModal && periodPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => periodDeleteStatus !== 'deleting' && setShowPeriodModal(false)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-red-500">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </div>
+            <h2 className="font-condensed font-bold text-xl text-brand-navy text-center mb-1">Delete period data?</h2>
+            <p className="text-sm text-gray-500 text-center mb-6">
+              This will permanently delete <strong>{periodPreview.sessions} session{periodPreview.sessions !== 1 ? 's' : ''}</strong> and all their attendance records for{' '}
+              <strong>{periodMode === 'month' ? periodValue : periodValue}</strong>. This cannot be undone.
+            </p>
+            {periodDeleteStatus === 'error' && (
+              <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2 mb-4 text-center">Something went wrong. Please try again.</p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPeriodModal(false)}
+                disabled={periodDeleteStatus === 'deleting'}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all active:scale-95 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePeriodDelete}
+                disabled={periodDeleteStatus === 'deleting'}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {periodDeleteStatus === 'deleting' ? 'Deleting…' : 'Yes, delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Reset confirmation modal */}
