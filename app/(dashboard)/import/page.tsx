@@ -128,6 +128,8 @@ export default function ImportPage() {
   const [status, setStatus] = useState<'idle' | 'importing' | 'done' | 'error'>('idle')
   const [result, setResult] = useState<{ membersCreated: number; membersUpdated: number; membersSkipped: number; attendanceCreated: number; attendanceSkipped: number } | null>(null)
   const [importError, setImportError] = useState('')
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetStatus, setResetStatus] = useState<'idle' | 'deleting' | 'done' | 'error'>('idle')
 
   function handleFile(file: File) {
     setFileName(file.name)
@@ -181,15 +183,46 @@ export default function ImportPage() {
     }
   }
 
+  async function handleReset() {
+    setResetStatus('deleting')
+    try {
+      const res = await fetch('/api/import', { method: 'DELETE' })
+      if (!res.ok) { setResetStatus('error'); return }
+      setResetStatus('done')
+      setShowResetModal(false)
+      setParsed(null)
+      setFileName('')
+      setStatus('idle')
+      setResult(null)
+      if (fileRef.current) fileRef.current.value = ''
+    } catch {
+      setResetStatus('error')
+    }
+  }
+
   const totalAttendance = parsed?.members.reduce((s, m) => s + m.attendanceDates.length, 0) ?? 0
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="mb-6">
-        <h1 className="font-condensed font-bold text-2xl text-brand-navy tracking-wide">Import from Google Sheets</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Export your check-in sheet as CSV (File → Download → CSV), then upload it here.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-condensed font-bold text-2xl text-brand-navy tracking-wide">Import from Google Sheets</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Export your check-in sheet as CSV (File → Download → CSV), then upload it here.
+          </p>
+        </div>
+        <button
+          onClick={() => { setShowResetModal(true); setResetStatus('idle') }}
+          className="flex-shrink-0 flex items-center gap-1.5 text-xs font-medium text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl transition-all active:scale-95"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            <path d="M10 11v6M14 11v6" />
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+          </svg>
+          Reset All Data
+        </button>
       </div>
 
       {/* Year selector */}
@@ -302,6 +335,55 @@ export default function ImportPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Reset confirmation modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => resetStatus !== 'deleting' && setShowResetModal(false)}
+          />
+
+          {/* Dialog */}
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-fade-up">
+            {/* Icon */}
+            <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-red-500">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </div>
+
+            <h2 className="font-condensed font-bold text-xl text-brand-navy text-center mb-1">Reset all data?</h2>
+            <p className="text-sm text-gray-500 text-center mb-6">
+              This will permanently delete all <strong>members</strong>, <strong>attendance records</strong>, <strong>sessions</strong>, and <strong>payments</strong>. Registrations are kept. This cannot be undone.
+            </p>
+
+            {resetStatus === 'error' && (
+              <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2 mb-4 text-center">Something went wrong. Please try again.</p>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowResetModal(false)}
+                disabled={resetStatus === 'deleting'}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all active:scale-95 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={resetStatus === 'deleting'}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {resetStatus === 'deleting' ? 'Deleting…' : 'Yes, delete everything'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

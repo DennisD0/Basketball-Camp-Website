@@ -7,6 +7,25 @@ async function requireAuth() {
   return cookieStore.has('auth')
 }
 
+export async function DELETE() {
+  if (!(await requireAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  try {
+    // Delete in FK-safe order: dependents first, then parents
+    await prisma.attendance.deleteMany()
+    await prisma.notification.deleteMany()
+    await prisma.payment.deleteMany()
+    await Promise.all([
+      prisma.member.deleteMany(),
+      prisma.session.deleteMany(),
+    ])
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('[import delete]', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
+
 export async function POST(request: NextRequest) {
   if (!(await requireAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
