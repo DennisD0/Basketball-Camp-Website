@@ -23,6 +23,7 @@ async function runImport(request: NextRequest) {
 
   let membersCreated = 0
   let membersUpdated = 0
+  let membersSkipped = 0
 
   // memberKey → member id
   const memberKeyToId: Record<string, string> = {}
@@ -31,12 +32,14 @@ async function runImport(request: NextRequest) {
 
   // --- Fetch all existing members in one query ---
   const existingMembers = await prisma.member.findMany({
-    select: { id: true, firstName: true, lastName: true },
+    select: { id: true, firstName: true, lastName: true, teamAssignment: true },
   })
-  const existingByKey: Record<string, { id: string }> = {}
+  const existingByKey: Record<string, { id: string; teamAssignment: string | null }> = {}
   for (const m of existingMembers) {
-    existingByKey[`${m.firstName} ${m.lastName}`.trim().toLowerCase()] = { id: m.id }
+    existingByKey[`${m.firstName} ${m.lastName}`.trim().toLowerCase()] = { id: m.id, teamAssignment: m.teamAssignment }
   }
+
+  const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase()
 
   // --- Batch: update existing + create new in parallel ---
   await Promise.all(validRows.map(async (row: {
@@ -58,15 +61,24 @@ async function runImport(request: NextRequest) {
     const key = `${data.firstName} ${data.lastName}`.trim().toLowerCase()
     const existing = existingByKey[key]
 
-    let member
+    let memberId: string
     if (existing) {
-      member = await prisma.member.update({ where: { id: existing.id }, data })
-      membersUpdated++
+      // True duplicate: every importable field is identical — skip entirely
+      const isDuplicate = norm(existing.teamAssignment) === norm(data.teamAssignment)
+      if (isDuplicate) {
+        membersSkipped++
+        memberId = existing.id
+      } else {
+        const member = await prisma.member.update({ where: { id: existing.id }, data })
+        membersUpdated++
+        memberId = member.id
+      }
     } else {
-      member = await prisma.member.create({ data: { ...data, sessionsTotal: data.sessionsTotal ?? 8 } })
+      const member = await prisma.member.create({ data: { ...data, sessionsTotal: data.sessionsTotal ?? 8 } })
       membersCreated++
+      memberId = member.id
     }
-    memberKeyToId[key] = member.id
+    memberKeyToId[key] = memberId
   }))
 
   // --- Sessions: batch upsert all unique dates in one transaction ---
@@ -101,5 +113,7 @@ async function runImport(request: NextRequest) {
     skipDuplicates: true,
   })
 
-  return NextResponse.json({ membersCreated, membersUpdated, attendanceCreated })
+  const attendanceSkipped = attendanceData.length - attendanceCreated
+
+  return NextResponse.json({ membersCreated, membersUpdated, membersSkipped, attendanceCreated, attendanceSkipped })
 }

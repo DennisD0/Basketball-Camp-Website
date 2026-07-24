@@ -126,7 +126,7 @@ export default function ImportPage() {
   const [parsed, setParsed] = useState<ParseResult | null>(null)
   const [fileName, setFileName] = useState('')
   const [status, setStatus] = useState<'idle' | 'importing' | 'done' | 'error'>('idle')
-  const [result, setResult] = useState<{ membersCreated: number; membersUpdated: number; attendanceCreated: number } | null>(null)
+  const [result, setResult] = useState<{ membersCreated: number; membersUpdated: number; membersSkipped: number; attendanceCreated: number; attendanceSkipped: number } | null>(null)
   const [importError, setImportError] = useState('')
 
   function handleFile(file: File) {
@@ -170,10 +170,10 @@ export default function ImportPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ members, attendance }),
       })
-      let data: { error?: string; membersCreated?: number; membersUpdated?: number; attendanceCreated?: number } = {}
+      let data: { error?: string; membersCreated?: number; membersUpdated?: number; membersSkipped?: number; attendanceCreated?: number; attendanceSkipped?: number } = {}
       try { data = await res.json() } catch { /* empty body — likely a timeout */ }
       if (!res.ok) { setImportError(data.error ?? 'Import failed — the request may have timed out.'); setStatus('error'); return }
-      setResult({ membersCreated: data.membersCreated ?? 0, membersUpdated: data.membersUpdated ?? 0, attendanceCreated: data.attendanceCreated ?? 0 })
+      setResult({ membersCreated: data.membersCreated ?? 0, membersUpdated: data.membersUpdated ?? 0, membersSkipped: data.membersSkipped ?? 0, attendanceCreated: data.attendanceCreated ?? 0, attendanceSkipped: data.attendanceSkipped ?? 0 })
       setStatus('done')
     } catch (e) {
       setImportError(String(e))
@@ -277,8 +277,16 @@ export default function ImportPage() {
           {parsed.members.length > 0 && (
             <div className="space-y-3">
               {status === 'done' && result && (
-                <div className="bg-green-50 rounded-xl p-4 text-sm text-green-700">
-                  ✓ <strong>{result.membersCreated}</strong> new students added, <strong>{result.membersUpdated}</strong> updated, <strong>{result.attendanceCreated}</strong> attendance records imported.
+                <div className="bg-green-50 rounded-xl p-4 text-sm text-green-700 space-y-1">
+                  <p>✓ <strong>{result.membersCreated}</strong> new student{result.membersCreated !== 1 ? 's' : ''} added
+                    {result.membersUpdated > 0 && <>, <strong>{result.membersUpdated}</strong> updated</>}
+                    {result.membersSkipped > 0 && <>, <strong>{result.membersSkipped}</strong> skipped (already up to date)</>}
+                    .
+                  </p>
+                  <p>✓ <strong>{result.attendanceCreated}</strong> attendance record{result.attendanceCreated !== 1 ? 's' : ''} imported
+                    {result.attendanceSkipped > 0 && <>, <strong>{result.attendanceSkipped}</strong> duplicate{result.attendanceSkipped !== 1 ? 's' : ''} skipped</>}
+                    .
+                  </p>
                 </div>
               )}
               {status === 'error' && (
