@@ -362,6 +362,7 @@ export default function ImportPage() {
             </div>
           )}
         </div>
+      </div>
 
       {/* Year selector */}
       <div className="bg-white rounded-2xl p-4 shadow-sm ring-1 ring-black/5 mb-4 flex items-center gap-4">
