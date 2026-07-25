@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     parentName, parentEmail, parentPhone, whatsappConsent,
     childName, programOption, sport, ageGroup,
     mediaConsent, injuryWaiver, noRefundAck,
-    packageOption, printedName, signedDate,
+    packageOption, printedName, signedDate, referredBy,
   } = body
 
   if (!parentName || !parentEmail || !parentPhone || !childName || !sport || !ageGroup) {
@@ -33,9 +33,10 @@ export async function POST(req: NextRequest) {
       mediaConsent: !!mediaConsent,
       injuryWaiver: !!injuryWaiver,
       noRefundAck: !!noRefundAck,
-      packageOption: packageOption ?? '7-week',
+      packageOption: packageOption ?? '5_sessions',
       printedName: printedName ?? null,
       signedDate: signedDate ?? null,
+      referredBy: referredBy ?? null,
       status: 'PENDING',
     },
   })

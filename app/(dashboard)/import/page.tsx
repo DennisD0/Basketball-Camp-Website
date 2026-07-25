@@ -123,8 +123,7 @@ function parseAttendanceCSV(text: string, year: number): ParseResult {
 export default function ImportPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [year, setYear] = useState(new Date().getFullYear())
-  const [parsed, setParsed] = useState<ParseResult | null>(null)
-  const [fileName, setFileName] = useState('')
+  const [fileResults, setFileResults] = useState<{ name: string; result: ParseResult }[]>([])
   const [status, setStatus] = useState<'idle' | 'importing' | 'done' | 'error'>('idle')
   const [result, setResult] = useState<{ membersCreated: number; membersUpdated: number; membersSkipped: number; attendanceCreated: number; attendanceSkipped: number } | null>(null)
   const [importError, setImportError] = useState('')
@@ -139,38 +138,60 @@ export default function ImportPage() {
   const [showPeriodModal, setShowPeriodModal] = useState(false)
   const [periodDeleteStatus, setPeriodDeleteStatus] = useState<'idle' | 'deleting' | 'error'>('idle')
 
-  function handleFile(file: File) {
-    setFileName(file.name)
-    setStatus('idle')
-    setResult(null)
-    const reader = new FileReader()
-    reader.onload = e => {
-      const text = e.target?.result as string
-      setParsed(parseAttendanceCSV(text, year))
-    }
-    reader.readAsText(file)
+  function readFile(file: File, yr: number): Promise<{ name: string; result: ParseResult }> {
+    return new Promise(resolve => {
+      const reader = new FileReader()
+      reader.onload = e => resolve({ name: file.name, result: parseAttendanceCSV(e.target?.result as string, yr) })
+      reader.readAsText(file)
+    })
   }
 
-  function reparse(newYear: number) {
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return
+    setStatus('idle')
+    setResult(null)
+    const results = await Promise.all(Array.from(files).map(f => readFile(f, year)))
+    setFileResults(results)
+  }
+
+  async function reparse(newYear: number) {
     setYear(newYear)
-    if (!fileRef.current?.files?.[0]) return
-    const reader = new FileReader()
-    reader.onload = e => setParsed(parseAttendanceCSV(e.target?.result as string, newYear))
-    reader.readAsText(fileRef.current.files[0])
+    if (!fileRef.current?.files?.length) return
+    const results = await Promise.all(Array.from(fileRef.current.files).map(f => readFile(f, newYear)))
+    setFileResults(results)
+  }
+
+  // Merge all files into one unified import payload, deduplicating members
+  function mergeResults() {
+    const memberMap = new Map<string, ParsedMember>()
+    for (const { result } of fileResults) {
+      for (const m of result.members) {
+        const key = m.name.toLowerCase()
+        if (memberMap.has(key)) {
+          const existing = memberMap.get(key)!
+          for (const d of m.attendanceDates) {
+            if (!existing.attendanceDates.includes(d)) existing.attendanceDates.push(d)
+          }
+        } else {
+          memberMap.set(key, { ...m })
+        }
+      }
+    }
+    return Array.from(memberMap.values())
   }
 
   async function handleImport() {
-    if (!parsed) return
+    const merged = mergeResults()
+    if (merged.length === 0) return
     setStatus('importing')
     setImportError('')
 
-    const members = parsed.members.map(m => ({
+    const members = merged.map(m => ({
       firstName: m.firstName,
       lastName: m.lastName,
       teamAssignment: m.classLabel,
     }))
-
-    const attendance = parsed.members.flatMap(m =>
+    const attendance = merged.flatMap(m =>
       m.attendanceDates.map(date => ({ memberKey: `${m.firstName} ${m.lastName}`.trim(), date }))
     )
 
@@ -234,8 +255,7 @@ export default function ImportPage() {
       if (!res.ok) { setResetStatus('error'); return }
       setResetStatus('done')
       setShowResetModal(false)
-      setParsed(null)
-      setFileName('')
+      setFileResults([])
       setStatus('idle')
       setResult(null)
       if (fileRef.current) fileRef.current.value = ''
@@ -244,7 +264,9 @@ export default function ImportPage() {
     }
   }
 
-  const totalAttendance = parsed?.members.reduce((s, m) => s + m.attendanceDates.length, 0) ?? 0
+  const merged = mergeResults()
+  const allErrors = fileResults.flatMap(f => f.result.errors.map(e => `${f.name}: ${e}`))
+  const totalAttendance = merged.reduce((s, m) => s + m.attendanceDates.length, 0)
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -252,7 +274,7 @@ export default function ImportPage() {
         <div>
           <h1 className="font-condensed font-bold text-2xl text-brand-navy tracking-wide">Import from Google Sheets</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Export your check-in sheet as CSV (File → Download → CSV), then upload it here.
+            Export each class CSV (File → Download → CSV) and upload them all at once — multiple files are merged automatically.
           </p>
         </div>
         <button
@@ -340,7 +362,6 @@ export default function ImportPage() {
             </div>
           )}
         </div>
-      </div>
 
       {/* Year selector */}
       <div className="bg-white rounded-2xl p-4 shadow-sm ring-1 ring-black/5 mb-4 flex items-center gap-4">
@@ -355,19 +376,20 @@ export default function ImportPage() {
         <p className="text-xs text-gray-400">The sheet uses M/DD format — pick the year to assign correct dates.</p>
       </div>
 
-      {/* Upload area */}
+      {/* Upload area — accepts multiple files */}
       <div
-        className="bg-white rounded-2xl p-8 shadow-sm ring-1 ring-black/5 mb-6 text-center cursor-pointer hover:ring-brand-teal/40 transition-all active:scale-98"
+        className="bg-white rounded-2xl p-8 shadow-sm ring-1 ring-black/5 mb-6 text-center cursor-pointer hover:ring-brand-teal/40 transition-all"
         onClick={() => fileRef.current?.click()}
         onDragOver={e => e.preventDefault()}
-        onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
+        onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files) }}
       >
         <input
           ref={fileRef}
           type="file"
           accept=".csv"
+          multiple
           className="hidden"
-          onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]) }}
+          onChange={e => handleFiles(e.target.files)}
         />
         <div className="w-14 h-14 rounded-2xl bg-brand-navy/5 flex items-center justify-center mx-auto mb-3">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7 text-brand-navy/40">
@@ -376,39 +398,52 @@ export default function ImportPage() {
             <line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
           </svg>
         </div>
-        <p className="font-semibold text-brand-navy text-sm">{fileName || 'Tap to upload CSV'}</p>
-        <p className="text-xs text-gray-400 mt-1">
-          {fileName ? 'Tap to replace file' : 'Or drag & drop your exported CSV here'}
-        </p>
+        {fileResults.length === 0 ? (
+          <>
+            <p className="font-semibold text-brand-navy text-sm">Tap to upload CSV files</p>
+            <p className="text-xs text-gray-400 mt-1">Select multiple files at once — or drag & drop them all here</p>
+          </>
+        ) : (
+          <>
+            <p className="font-semibold text-brand-navy text-sm">{fileResults.length} file{fileResults.length !== 1 ? 's' : ''} loaded</p>
+            <div className="mt-2 space-y-0.5">
+              {fileResults.map((f, i) => (
+                <p key={i} className="text-xs text-gray-500">{f.name} · {f.result.members.length} students</p>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-2">Tap to replace files</p>
+          </>
+        )}
       </div>
 
-      {parsed && (
+      {fileResults.length > 0 && (
         <>
-          {/* Parse errors */}
-          {parsed.errors.length > 0 && (
-            <div className="bg-red-50 rounded-xl p-4 mb-4 text-sm text-red-600">
-              {parsed.errors.map((e, i) => <p key={i}>{e}</p>)}
+          {allErrors.length > 0 && (
+            <div className="bg-red-50 rounded-xl p-4 mb-4 text-sm text-red-600 space-y-1">
+              {allErrors.map((e, i) => <p key={i}>{e}</p>)}
             </div>
           )}
 
-          {/* Summary */}
-          {parsed.members.length > 0 && (
+          {merged.length > 0 && (
             <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5 mb-4">
-              <h2 className="font-semibold text-brand-navy mb-3">Preview</h2>
-              <div className="grid grid-cols-2 gap-3 mb-4">
+              <h2 className="font-semibold text-brand-navy mb-3">Merged Preview</h2>
+              <div className="grid grid-cols-3 gap-3 mb-4">
                 <div className="bg-brand-navy/5 rounded-xl p-3 text-center">
-                  <div className="text-2xl font-bold text-brand-navy">{parsed.members.length}</div>
+                  <div className="text-2xl font-bold text-brand-navy">{fileResults.length}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">CSV files</div>
+                </div>
+                <div className="bg-brand-navy/5 rounded-xl p-3 text-center">
+                  <div className="text-2xl font-bold text-brand-navy">{merged.length}</div>
                   <div className="text-xs text-gray-500 mt-0.5">Students</div>
                 </div>
                 <div className="bg-brand-teal/5 rounded-xl p-3 text-center">
                   <div className="text-2xl font-bold text-brand-teal">{totalAttendance}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">Attendance records</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Records</div>
                 </div>
               </div>
 
-              {/* Student list */}
               <div className="space-y-2 max-h-72 overflow-y-auto">
-                {parsed.members.map((m, i) => (
+                {merged.map((m, i) => (
                   <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0 gap-2">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">{m.name}</p>
@@ -423,8 +458,7 @@ export default function ImportPage() {
             </div>
           )}
 
-          {/* Import button + result */}
-          {parsed.members.length > 0 && (
+          {merged.length > 0 && (
             <div className="space-y-3">
               {status === 'done' && result && (
                 <div className="bg-green-50 rounded-xl p-4 text-sm text-green-700 space-y-1">
@@ -447,7 +481,7 @@ export default function ImportPage() {
                 disabled={status === 'importing'}
                 className="w-full py-3.5 bg-brand-navy text-white rounded-2xl text-sm font-semibold hover:bg-brand-navy/90 active:scale-95 transition-all disabled:opacity-50"
               >
-                {status === 'importing' ? 'Importing…' : `Import ${parsed.members.length} students + ${totalAttendance} records`}
+                {status === 'importing' ? 'Importing…' : `Import ${merged.length} students + ${totalAttendance} records`}
               </button>
             </div>
           )}

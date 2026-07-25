@@ -150,9 +150,21 @@ model Registration {
   packageOption   String   @default("7-week") @map("package_option")
   printedName     String?  @map("printed_name")
   signedDate      String?  @map("signed_date")
+  referredBy      String?  @map("referred_by")
   status          String   @default("PENDING")
   notes           String?
   createdAt       DateTime @default(now()) @map("created_at")
 
   @@map("registrations")
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  description String
+  category    String
+  amount      Decimal  @db.Decimal(10, 2)
+  date        DateTime
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("expenses")
 }

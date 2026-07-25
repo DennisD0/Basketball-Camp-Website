@@ -1,24 +1,30 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 
-const SPORTS = ['Basketball', 'Volleyball']
-
-const PRICING_TIERS = [
-  { value: 'early_bird',   label: 'Early Bird',   price: '$350', sub: 'Register by June 6',  badge: 'Save $50' },
-  { value: 'memorial_day', label: 'Best Deal',    price: '$300', sub: 'Register by May 31',  badge: 'Save $100' },
-  { value: 'regular',      label: 'Standard',     price: '$400', sub: 'Register by July 5',  badge: null },
+const SESSION_PACKAGES = [
+  { value: '5_sessions', label: '5 Sessions', price: '$150', sessions: 5, description: '5 classes · complete within 7 weeks', badge: null },
+  { value: '7_sessions', label: '7 Sessions', price: '$200', sessions: 7, description: '7 classes · complete within 9 weeks', badge: 'Best Value' },
+  { value: 'drop_in',   label: 'Drop-in',    price: '$32',  sessions: 1,  description: 'Single class · no commitment', badge: null },
 ]
 
-// Combined key used for API + contract display
-function sportProgramKey(sport: string, tier: string) {
-  return `${sport.toLowerCase()}_${tier}`
+const SPORTS = ['Basketball', 'Volleyball'] as const
+type Sport = typeof SPORTS[number]
+
+const SPORT_SCHEDULES: Record<Sport, { time: string; ages: string }[]> = {
+  Basketball: [
+    { time: 'Tue 4–5PM', ages: 'Ages 7–12' },
+    { time: 'Fri 4–5PM', ages: 'Ages 5–9' },
+    { time: 'Fri 5–6PM', ages: 'Ages 9–12' },
+  ],
+  Volleyball: [
+    { time: 'Sat 1–3PM', ages: 'Middle–High School' },
+  ],
 }
 
-const PACKAGES = [
-  { value: '5-week', label: '5-Week Package', sessions: 5, windowWeeks: 7, description: '5 classes · complete within 7 weeks' },
-  { value: '7-week', label: '7-Week Package', sessions: 7, windowWeeks: 9, description: '7 classes · complete within 9 weeks' },
-]
+function sportProgramKey(sport: string, pkg: string) {
+  return `${sport.toLowerCase()}_${pkg}`
+}
 
 const AGE_GROUPS = [
   'U6 (Ages 5–6)',
@@ -29,28 +35,209 @@ const AGE_GROUPS = [
   'U16 (Ages 15–16)',
 ]
 
-export default function RegistrationForm() {
-  const [step, setStep] = useState<'form' | 'confirm' | 'success'>('form')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [form, setForm] = useState({
+// --- Scroll-to-enable terms modal ---
+function TermsModal({
+  form,
+  loading,
+  canSubmit,
+  onScrollBottom,
+  onConfirm,
+  onClose,
+  error,
+}: {
+  form: ReturnType<typeof buildInitialForm>
+  loading: boolean
+  canSubmit: boolean
+  onScrollBottom: () => void
+  onConfirm: () => void
+  onClose: () => void
+  error: string
+}) {
+  const pkg = SESSION_PACKAGES.find(p => p.value === form.packageOption)
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 20) {
+      onScrollBottom()
+    }
+  }, [onScrollBottom])
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl flex flex-col max-h-full w-full max-w-lg mx-auto my-auto">
+        {/* Modal header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+          <div>
+            <h2 className="font-bold text-brand-navy text-base">Review & Confirm</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Scroll to the bottom to enable registration</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 hover:bg-gray-200 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4" onScroll={handleScroll}>
+          {/* Registration summary */}
+          <div className="bg-[#F4F2EE] rounded-xl p-4 space-y-2 text-sm">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Registration Summary</p>
+            <SummaryRow label="Child" value={form.childName} />
+            <SummaryRow label="Age Group" value={form.ageGroup} />
+            <SummaryRow label="Sport" value={form.sport} />
+            <SummaryRow label="Package" value={pkg ? `${pkg.label} — ${pkg.price}` : form.packageOption} />
+            <SummaryRow label="Parent" value={form.parentName} />
+            <SummaryRow label="Email" value={form.parentEmail} />
+            <SummaryRow label="Phone" value={form.parentPhone} />
+            {form.referredBy && <SummaryRow label="Referred by" value={form.referredBy} />}
+          </div>
+
+          {/* Payment info */}
+          <div className="bg-brand-teal/5 rounded-xl p-4 ring-1 ring-brand-teal/20">
+            <p className="text-xs font-semibold text-brand-teal uppercase tracking-wider mb-1.5">Payment Instructions</p>
+            <p className="text-sm text-gray-600">Zelle: <span className="font-semibold text-gray-800">347-200-4439</span></p>
+            <p className="text-xs text-gray-400 mt-1.5">Include your child's name in the memo. No spot is held until payment is received.</p>
+          </div>
+
+          {/* Terms & Conditions */}
+          <div className="rounded-xl border border-gray-200 p-4 text-xs text-gray-600 space-y-3">
+            <p className="font-semibold text-gray-800 text-sm">Terms & Conditions</p>
+
+            <div>
+              <p className="font-semibold text-gray-700 mb-1">1. Program Commitment</p>
+              <p>By registering, you agree that your child will participate exclusively in the 413 Youth Club program for the duration of the selected session package (5 or 7 sessions). During this period, your child may not compete on or be rostered for another team or club in the same sport.</p>
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-700 mb-1">2. Injury Liability Waiver</p>
+              <p>Participation in basketball and volleyball carries an inherent risk of injury. By registering, you acknowledge these risks and release 413 Youth Club, its coaches, and staff from liability for any injury that may occur during sessions or events.</p>
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-700 mb-1">3. No Refund Policy</p>
+              <p>All session packages are non-refundable once purchased. In the event of cancellation by the club (e.g., weather, facility issues), a make-up session will be scheduled. No cash refunds will be issued.</p>
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-700 mb-1">4. Media Consent</p>
+              {form.mediaConsent
+                ? <p>You have consented to allow your child to appear in photos and videos used for promotional and social media purposes.</p>
+                : <p>You have <strong>not</strong> consented to media use. Your child's image will not be used without further permission.</p>
+              }
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-700 mb-1">5. Drop-in Policy</p>
+              <p>Drop-in sessions ($32/class) are pay-per-visit with no package commitment. Drop-in participants may attend available sessions subject to capacity. Drop-in does not apply toward session package counts.</p>
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-700 mb-1">6. Referral Discount</p>
+              <p>If you were referred by a current member and have provided their name, both parties will receive a 5% discount to be applied and verified by an admin. This offer is exclusive to Volleyball registrations.</p>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-3 mt-2">
+              <p className="font-semibold text-gray-800 mb-1">Agreements Confirmed</p>
+              <ul className="space-y-1">
+                <AgreementLine ok={form.injuryWaiver}  label="Injury Liability Waiver" />
+                <AgreementLine ok={form.noRefundAck}   label="No Refund Policy" />
+                <AgreementLine ok={form.mediaConsent}  label="Media Consent" />
+                <AgreementLine ok={form.whatsappConsent} label="WhatsApp Group Communications" />
+                <AgreementLine ok={form.competingAck}  label="Exclusive Participation Agreement (no competing teams)" />
+              </ul>
+            </div>
+
+            <div className="pt-2">
+              <p className="font-semibold text-gray-700 mb-1">Signature</p>
+              <p>Signed by: <span className="font-medium text-gray-900">{form.printedName}</span></p>
+              <p>Date: <span className="font-medium text-gray-900">{form.signedDate}</span></p>
+            </div>
+          </div>
+
+          {/* Scroll cue */}
+          {!canSubmit && (
+            <div className="text-center py-2 text-xs text-gray-400 flex items-center justify-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+              </svg>
+              Keep scrolling to enable registration
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0 space-y-2">
+          {error && <p className="text-sm text-red-500 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+          <button
+            onClick={onConfirm}
+            disabled={!canSubmit || loading}
+            className={`w-full py-3 rounded-full text-sm font-semibold transition-all ${
+              canSubmit && !loading
+                ? 'bg-brand-teal text-white hover:bg-brand-teal/90 active:scale-95'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            {loading ? 'Submitting…' : canSubmit ? 'Confirm & Register' : 'Scroll to unlock'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-xs font-medium text-gray-400">{label}</span>
+      <span className="text-sm font-semibold text-gray-800 text-right">{value || '—'}</span>
+    </div>
+  )
+}
+
+function AgreementLine({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <li className="flex items-start gap-2">
+      <span className={`mt-0.5 flex-shrink-0 w-3.5 h-3.5 rounded-full flex items-center justify-center ${ok ? 'bg-brand-teal' : 'bg-gray-300'}`}>
+        {ok && <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+      </span>
+      <span className={ok ? 'text-gray-700' : 'text-gray-400 line-through'}>{label}</span>
+    </li>
+  )
+}
+
+// --- Main form ---
+function buildInitialForm() {
+  return {
     parentName:      '',
     parentEmail:     '',
     parentPhone:     '',
     whatsappConsent: false,
     childName:       '',
     ageGroup:        '',
-    sport:           '',   // Basketball | Volleyball
-    pricingTier:     '',   // early_bird | memorial_day | regular
-    packageOption:   '',   // must be explicitly chosen before pricing reveals
+    sport:           '' as string,
+    packageOption:   '',
+    referredBy:      '',
     mediaConsent:    false,
     injuryWaiver:    false,
     noRefundAck:     false,
+    competingAck:    false,
     printedName:     '',
     signedDate:      '',
-  })
+  }
+}
 
-  function set<K extends keyof typeof form>(key: K, value: typeof form[K]) {
+const inputCls = 'w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-teal/40 bg-white'
+
+export default function RegistrationForm() {
+  const [step, setStep] = useState<'form' | 'success'>('form')
+  const [showModal, setShowModal] = useState(false)
+  const [canSubmit, setCanSubmit] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [form, setForm] = useState(buildInitialForm)
+
+  function set<K extends keyof ReturnType<typeof buildInitialForm>>(key: K, value: ReturnType<typeof buildInitialForm>[K]) {
     setForm(f => ({ ...f, [key]: value }))
   }
 
@@ -59,9 +246,14 @@ export default function RegistrationForm() {
     setError('')
     if (!form.packageOption) { setError('Please select a session package.'); return }
     if (!form.sport) { setError('Please select a sport.'); return }
-    if (!form.pricingTier) { setError('Please select a pricing option.'); return }
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-    setStep('confirm')
+    if (!form.injuryWaiver || !form.noRefundAck || !form.competingAck) {
+      setError('Please agree to all required terms before continuing.'); return
+    }
+    if (!form.printedName.trim() || !form.signedDate.trim()) {
+      setError('Please enter your printed name and date.'); return
+    }
+    setShowModal(true)
+    setCanSubmit(false)
   }
 
   async function handleConfirm() {
@@ -69,7 +261,8 @@ export default function RegistrationForm() {
     setError('')
 
     const ageValue = form.ageGroup.split(' ')[0]
-    const programOption = sportProgramKey(form.sport, form.pricingTier)
+    const programOption = sportProgramKey(form.sport, form.packageOption)
+    const pkg = SESSION_PACKAGES.find(p => p.value === form.packageOption)
 
     const res = await fetch('/api/register', {
       method: 'POST',
@@ -84,6 +277,8 @@ export default function RegistrationForm() {
         sport:           form.sport,
         programOption,
         packageOption:   form.packageOption,
+        sessionsTotal:   pkg?.sessions ?? 5,
+        referredBy:      form.referredBy.trim() || null,
         mediaConsent:    form.mediaConsent,
         injuryWaiver:    form.injuryWaiver,
         noRefundAck:     form.noRefundAck,
@@ -94,73 +289,12 @@ export default function RegistrationForm() {
 
     setLoading(false)
     if (res.ok) {
+      setShowModal(false)
       setStep('success')
     } else {
       const data = await res.json().catch(() => ({}))
       setError(data.error || 'Something went wrong. Please try again.')
-      setStep('form')
     }
-  }
-
-  if (step === 'confirm') {
-    const tier = PRICING_TIERS.find(t => t.value === form.pricingTier)
-    const pkg = PACKAGES.find(p => p.value === form.packageOption)
-    return (
-      <div className="space-y-6">
-        <div className="text-center mb-2">
-          <h2 className="text-xl font-bold text-brand-navy">Review Your Registration</h2>
-          <p className="text-sm text-gray-400 mt-1">Please confirm the details below before submitting.</p>
-        </div>
-
-        <div className="bg-[#F4F2EE] rounded-2xl p-5 space-y-3">
-          <Row label="Child's Name"     value={form.childName} />
-          <Row label="Age Group"        value={form.ageGroup} />
-          <Row label="Sport"            value={form.sport} />
-          <Row label="Pricing Option"   value={tier ? `${tier.label} (${tier.price})` : form.pricingTier} />
-          <Row label="Package"          value={pkg ? `${pkg.label} — ${pkg.sessions} classes` : form.packageOption} />
-          <Row label="Parent / Guardian" value={form.parentName} />
-          <Row label="Email"            value={form.parentEmail} />
-          <Row label="Phone"            value={form.parentPhone} />
-          <hr className="border-gray-200" />
-          <Row label="Printed Name"     value={form.printedName} />
-          <Row label="Signed Date"      value={form.signedDate} />
-        </div>
-
-        <div className="bg-white rounded-2xl p-5 ring-1 ring-black/5 space-y-2">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Agreements Confirmed</p>
-          <AckRow checked={form.injuryWaiver}    label="Injury Liability Waiver" />
-          <AckRow checked={form.noRefundAck}     label="No Refund Policy" />
-          <AckRow checked={form.mediaConsent}    label="Media Consent" />
-          <AckRow checked={form.whatsappConsent} label="WhatsApp Group Communications" />
-        </div>
-
-        <div className="bg-brand-teal/5 rounded-2xl p-5 ring-1 ring-brand-teal/20">
-          <p className="text-xs font-semibold text-brand-teal uppercase tracking-wider mb-2">Payment Instructions</p>
-          <p className="text-sm text-gray-600">Zelle: <span className="font-semibold text-gray-800">347-200-4439</span></p>
-          <p className="text-xs text-gray-400 mt-2">Include your child's name in the memo. No spot is held until payment is received.</p>
-        </div>
-
-        {error && <p className="text-sm text-red-500 bg-red-50 rounded-lg px-4 py-3">{error}</p>}
-
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => setStep('form')}
-            className="flex-1 py-3 rounded-full border-2 border-gray-200 text-sm font-semibold text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all"
-          >
-            Go Back
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={loading}
-            className="flex-1 py-3 rounded-full bg-brand-teal text-white text-sm font-semibold hover:bg-brand-teal/90 disabled:opacity-60 transition-all"
-          >
-            {loading ? 'Submitting…' : 'Confirm & Submit'}
-          </button>
-        </div>
-      </div>
-    )
   }
 
   if (step === 'success') {
@@ -183,259 +317,264 @@ export default function RegistrationForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Parent info */}
-      <fieldset>
-        <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Parent / Guardian</legend>
-        <div className="space-y-4">
-          <Field label="Full Name" required>
-            <input
-              type="text" required placeholder="Jane Smith"
-              value={form.parentName} onChange={e => set('parentName', e.target.value)}
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Email Address" required>
-            <input
-              type="email" required placeholder="jane@email.com"
-              value={form.parentEmail} onChange={e => set('parentEmail', e.target.value)}
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Phone Number" required>
-            <input
-              type="tel" required placeholder="(413) 555-0100"
-              value={form.parentPhone} onChange={e => set('parentPhone', e.target.value)}
-              className={inputCls}
-            />
-          </Field>
-          <Checkbox
-            id="whatsapp"
-            checked={form.whatsappConsent}
-            onChange={v => set('whatsappConsent', v)}
-            label="I'm willing to use WhatsApp for group communications with coaches"
-          />
-        </div>
-      </fieldset>
+    <>
+      {showModal && (
+        <TermsModal
+          form={form}
+          loading={loading}
+          canSubmit={canSubmit}
+          onScrollBottom={() => setCanSubmit(true)}
+          onConfirm={handleConfirm}
+          onClose={() => setShowModal(false)}
+          error={error}
+        />
+      )}
 
-      <hr className="border-gray-100" />
-
-      {/* Child info */}
-      <fieldset>
-        <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Child</legend>
-        <div className="space-y-4">
-          <Field label="Child's Full Name" required>
-            <input
-              type="text" required placeholder="Alex Smith"
-              value={form.childName} onChange={e => set('childName', e.target.value)}
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Age Group" required>
-            <select required value={form.ageGroup} onChange={e => set('ageGroup', e.target.value)} className={inputCls}>
-              <option value="">Select…</option>
-              {AGE_GROUPS.map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </Field>
-        </div>
-      </fieldset>
-
-      <hr className="border-gray-100" />
-
-      {/* Package selection — always shown first */}
-      <fieldset>
-        <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Session Package</legend>
-        <div className="space-y-2">
-          {PACKAGES.map(p => {
-            const selected = form.packageOption === p.value
-            return (
-              <button
-                key={p.value}
-                type="button"
-                onClick={() => {
-                  if (selected) {
-                    set('packageOption', ''); set('sport', ''); set('pricingTier', '')
-                  } else {
-                    set('packageOption', p.value); set('sport', ''); set('pricingTier', '')
-                  }
-                }}
-                className={`w-full flex items-center justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all text-left active:scale-[0.98] ${
-                  selected ? 'border-brand-teal bg-brand-teal/5' : 'border-gray-100 hover:border-gray-200'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
-                    selected ? 'border-brand-teal' : 'border-gray-300'
-                  }`}>
-                    {selected && <span className="w-2 h-2 rounded-full bg-brand-teal" />}
-                  </span>
-                  <div>
-                    <span className="text-sm font-semibold text-gray-800">{p.label}</span>
-                    <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>
-                  </div>
-                </div>
-                <span className="text-xs font-bold text-brand-teal flex-shrink-0">{p.sessions} classes</span>
-              </button>
-            )
-          })}
-        </div>
-      </fieldset>
-
-      {/* Sport — revealed after package chosen */}
-      <div className={`transition-all duration-300 overflow-hidden ${
-        form.packageOption ? 'max-h-[400px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
-      }`}>
-        <hr className="border-gray-100 mb-6" />
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Parent / Guardian */}
         <fieldset>
-          <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Sport</legend>
+          <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Parent / Guardian</legend>
+          <div className="space-y-4">
+            <Field label="Full Name" required>
+              <input
+                type="text" required placeholder="Jane Smith"
+                value={form.parentName} onChange={e => set('parentName', e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Email Address" required>
+              <input
+                type="email" required placeholder="jane@email.com"
+                value={form.parentEmail} onChange={e => set('parentEmail', e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Phone Number" required>
+              <input
+                type="tel" required placeholder="(413) 555-0100"
+                value={form.parentPhone} onChange={e => set('parentPhone', e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <Checkbox
+              id="whatsapp"
+              checked={form.whatsappConsent}
+              onChange={v => set('whatsappConsent', v)}
+              label="I'm willing to use WhatsApp for group communications with coaches"
+            />
+          </div>
+        </fieldset>
+
+        <hr className="border-gray-100" />
+
+        {/* Child */}
+        <fieldset>
+          <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Child</legend>
+          <div className="space-y-4">
+            <Field label="Child's Full Name" required>
+              <input
+                type="text" required placeholder="Alex Smith"
+                value={form.childName} onChange={e => set('childName', e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Age Group" required>
+              <select required value={form.ageGroup} onChange={e => set('ageGroup', e.target.value)} className={inputCls}>
+                <option value="">Select…</option>
+                {AGE_GROUPS.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </Field>
+          </div>
+        </fieldset>
+
+        <hr className="border-gray-100" />
+
+        {/* Session Package — always visible */}
+        <fieldset>
+          <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Session Package</legend>
+          <p className="text-xs text-gray-400 mb-3">Choose how many sessions to purchase</p>
           <div className="space-y-2">
-            {SPORTS.map(s => {
-              const selected = form.sport === s
+            {SESSION_PACKAGES.map(p => {
+              const selected = form.packageOption === p.value
               return (
                 <button
-                  key={s}
+                  key={p.value}
                   type="button"
                   onClick={() => {
-                    if (selected) {
-                      set('sport', ''); set('pricingTier', '')
-                    } else {
-                      set('sport', s); set('pricingTier', '')
-                    }
+                    if (selected) { set('packageOption', ''); set('sport', '') }
+                    else { set('packageOption', p.value); set('sport', '') }
                   }}
-                  className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all text-left active:scale-[0.98] ${
+                  className={`w-full flex items-center justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all text-left active:scale-[0.98] ${
                     selected ? 'border-brand-teal bg-brand-teal/5' : 'border-gray-100 hover:border-gray-200'
                   }`}
                 >
-                  <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
-                    selected ? 'border-brand-teal' : 'border-gray-300'
-                  }`}>
-                    {selected && <span className="w-2 h-2 rounded-full bg-brand-teal" />}
-                  </span>
-                  <span className="text-sm font-semibold text-gray-800">{s}</span>
+                  <div className="flex items-center gap-3">
+                    <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+                      selected ? 'border-brand-teal' : 'border-gray-300'
+                    }`}>
+                      {selected && <span className="w-2 h-2 rounded-full bg-brand-teal" />}
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-800">{p.label}</span>
+                        {p.badge && (
+                          <span className="text-[10px] font-bold text-brand-teal bg-brand-teal/10 px-1.5 py-0.5 rounded-full">
+                            {p.badge}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>
+                    </div>
+                  </div>
+                  <span className="text-sm font-bold text-brand-teal flex-shrink-0">{p.price}</span>
                 </button>
               )
             })}
           </div>
         </fieldset>
-      </div>
 
-      {/* Pricing tier — revealed after sport chosen */}
-      <div className={`transition-all duration-300 overflow-hidden ${
-        form.sport ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
-      }`}>
-        <hr className="border-gray-100 mb-6" />
-        <fieldset>
-          <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Pricing Option</legend>
-          <p className="text-xs text-gray-400 mb-3">Select the pricing tier that applies to you</p>
-          <div className="space-y-2">
-            {PRICING_TIERS.map(t => {
-              const selected = form.pricingTier === t.value
-              return (
-              <button
-                key={t.value}
-                type="button"
-                onClick={() => set('pricingTier', selected ? '' : t.value)}
-                className={`w-full flex items-center justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all text-left active:scale-[0.98] ${
-                  selected ? 'border-brand-teal bg-brand-teal/5' : 'border-gray-100 hover:border-gray-200'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
-                    selected ? 'border-brand-teal' : 'border-gray-300'
-                  }`}>
-                    {selected && <span className="w-2 h-2 rounded-full bg-brand-teal" />}
-                  </span>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-gray-800">{t.label}</span>
-                      {t.badge && (
-                        <span className="text-[10px] font-bold text-brand-teal bg-brand-teal/10 px-1.5 py-0.5 rounded-full">
-                          {t.badge}
-                        </span>
-                      )}
+        {/* Sport — revealed after package chosen */}
+        <div className={`transition-all duration-300 overflow-hidden ${
+          form.packageOption ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+        }`}>
+          <hr className="border-gray-100 mb-6" />
+          <fieldset>
+            <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Sport</legend>
+            <p className="text-xs text-gray-400 mb-3">Select the sport and review the schedule</p>
+            <div className="space-y-2">
+              {SPORTS.map(s => {
+                const selected = form.sport === s
+                const schedule = SPORT_SCHEDULES[s]
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      if (selected) { set('sport', ''); set('referredBy', '') }
+                      else { set('sport', s); set('referredBy', '') }
+                    }}
+                    className={`w-full flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all text-left active:scale-[0.98] ${
+                      selected ? 'border-brand-teal bg-brand-teal/5' : 'border-gray-100 hover:border-gray-200'
+                    }`}
+                  >
+                    <span className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+                      selected ? 'border-brand-teal' : 'border-gray-300'
+                    }`}>
+                      {selected && <span className="w-2 h-2 rounded-full bg-brand-teal" />}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-semibold text-gray-800">{s}</span>
+                      <div className="mt-1.5 space-y-1">
+                        {schedule.map((slot, i) => (
+                          <div key={i} className="flex items-center gap-2 text-xs text-gray-500">
+                            <span className="font-medium text-gray-700">{slot.time}</span>
+                            <span className="text-gray-300">·</span>
+                            <span>{slot.ages}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{t.sub}</p>
-                  </div>
-                </div>
-                <span className="text-sm font-bold text-brand-teal flex-shrink-0">{t.price}</span>
-              </button>
-              )
-            })}
+                  </button>
+                )
+              })}
+            </div>
+          </fieldset>
+        </div>
+
+        {/* Affiliate / Referral — volleyball only */}
+        <div className={`transition-all duration-300 overflow-hidden ${
+          form.sport === 'Volleyball' ? 'max-h-[300px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+        }`}>
+          <hr className="border-gray-100 mb-6" />
+          <fieldset>
+            <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Referral (Optional)</legend>
+            <p className="text-xs text-gray-400 mb-3">
+              Were you invited by a current member? Enter their name and you both receive <span className="font-semibold text-brand-teal">5% off</span> — verified by admin. Volleyball only.
+            </p>
+            <Field label="Referred by (full name)">
+              <input
+                type="text"
+                placeholder="Leave blank if not applicable"
+                value={form.referredBy}
+                onChange={e => set('referredBy', e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          </fieldset>
+        </div>
+
+        <hr className="border-gray-100" />
+
+        {/* Agreements */}
+        <fieldset>
+          <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Agreements</legend>
+          <div className="space-y-3">
+            <Checkbox
+              id="injury"
+              required
+              checked={form.injuryWaiver}
+              onChange={v => set('injuryWaiver', v)}
+              label="Injury Liability Waiver — I acknowledge the risks of physical activity and release 413 Youth Club and its staff from liability for injury during sessions."
+            />
+            <Checkbox
+              id="refund"
+              required
+              checked={form.noRefundAck}
+              onChange={v => set('noRefundAck', v)}
+              label="No Refund Policy — I understand that session packages are non-refundable. Make-up sessions will be offered for club-cancelled classes."
+            />
+            <Checkbox
+              id="competing"
+              required
+              checked={form.competingAck}
+              onChange={v => set('competingAck', v)}
+              label="Exclusive Participation — I understand that my child may not compete on or be rostered for another team in the same sport during the 5- or 7-session program period."
+            />
+            <Checkbox
+              id="media"
+              checked={form.mediaConsent}
+              onChange={v => set('mediaConsent', v)}
+              label="Media Consent — I give permission for my child to appear in photos/videos for promotional and social media use."
+            />
           </div>
         </fieldset>
-      </div>
 
-      <hr className="border-gray-100" />
+        <hr className="border-gray-100" />
 
-      {/* Consents */}
-      <fieldset>
-        <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Agreements</legend>
-        <div className="space-y-3">
-          <Checkbox
-            id="media"
-            checked={form.mediaConsent}
-            onChange={v => set('mediaConsent', v)}
-            label="Media Consent — I give permission for my child to appear in photos/videos for promotional and social media use."
-          />
-          <Checkbox
-            id="injury"
-            required
-            checked={form.injuryWaiver}
-            onChange={v => set('injuryWaiver', v)}
-            label="Injury Liability Waiver — I understand this is a physical activity and release the coaches and 413 Youth Club from liability for injuries. (Required)"
-          />
-          <Checkbox
-            id="refund"
-            required
-            checked={form.noRefundAck}
-            onChange={v => set('noRefundAck', v)}
-            label="No Refund Policy — I understand all payments are final and non-refundable. (Required)"
-          />
-        </div>
-      </fieldset>
+        {/* Signature */}
+        <fieldset>
+          <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Signature</legend>
+          <p className="text-xs text-gray-400 mb-3">By entering your name and date, you agree to the terms above.</p>
+          <div className="space-y-4">
+            <Field label="Printed Name" required>
+              <input
+                type="text" required placeholder="Your full legal name"
+                value={form.printedName} onChange={e => set('printedName', e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Date" required>
+              <input
+                type="date" required
+                value={form.signedDate} onChange={e => set('signedDate', e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          </div>
+        </fieldset>
 
-      <hr className="border-gray-100" />
+        {error && <p className="text-sm text-red-500 bg-red-50 rounded-lg px-4 py-3">{error}</p>}
 
-      {/* Signature */}
-      <fieldset>
-        <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Signature</legend>
-        <p className="text-xs text-gray-400 mb-3">By completing below you confirm all information is accurate and agree to the terms above.</p>
-        <div className="space-y-4">
-          <Field label="Printed Name" required>
-            <input
-              type="text" required placeholder="Full legal name"
-              value={form.printedName} onChange={e => set('printedName', e.target.value)}
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Date" required>
-            <input
-              type="text" required placeholder="MM / DD / YYYY"
-              value={form.signedDate} onChange={e => set('signedDate', e.target.value)}
-              className={inputCls}
-            />
-          </Field>
-        </div>
-      </fieldset>
-
-      {error && <p className="text-sm text-red-500 bg-red-50 rounded-lg px-4 py-3">{error}</p>}
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full bg-brand-teal text-white py-3.5 rounded-full font-semibold text-sm hover:bg-brand-teal/90 transition-all disabled:opacity-60 hover:-translate-y-0.5"
-      >
-        {loading ? 'Submitting…' : 'Review Registration'}
-      </button>
-
-      <p className="text-xs text-gray-400 text-center">
-        After submitting, you'll receive payment instructions. No spot is held until payment is received.
-      </p>
-    </form>
+        <button
+          type="submit"
+          className="w-full py-3.5 rounded-full bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 active:scale-95 transition-all"
+        >
+          Review Registration →
+        </button>
+      </form>
+    </>
   )
 }
-
-const inputCls = 'w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-teal/40 bg-white'
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
@@ -444,26 +583,6 @@ function Field({ label, required, children }: { label: string; required?: boolea
         {label}{required && <span className="text-brand-orange ml-0.5">*</span>}
       </label>
       {children}
-    </div>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-xs font-medium text-gray-400">{label}</span>
-      <span className="text-sm font-semibold text-gray-800 text-right">{value || '—'}</span>
-    </div>
-  )
-}
-
-function AckRow({ checked, label }: { checked: boolean; label: string }) {
-  return (
-    <div className="flex items-center gap-2.5">
-      <span className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${checked ? 'bg-brand-teal' : 'bg-gray-200'}`}>
-        {checked && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
-      </span>
-      <span className={`text-xs ${checked ? 'text-gray-700' : 'text-gray-400 line-through'}`}>{label}</span>
     </div>
   )
 }

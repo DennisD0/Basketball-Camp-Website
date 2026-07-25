@@ -1,15 +1,82 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Registration } from '@prisma/client'
+
+function ContractPreviewPanel({ id, onClose }: { id: string; onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = ''
+    }
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-gray-900/95"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-800 border-b border-gray-700 flex-shrink-0">
+        <span className="text-sm font-semibold text-gray-200">Contract Preview</span>
+        <div className="flex items-center gap-3">
+          <a
+            href={`/registrations/${id}/contract`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gray-700 text-gray-200 rounded-lg hover:bg-gray-600 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+              <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+            </svg>
+            Open &amp; Print
+          </a>
+          <button
+            onClick={onClose}
+            className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* PDF viewer area */}
+      <div className="flex-1 overflow-hidden p-4">
+        <div className="h-full max-w-4xl mx-auto rounded-xl overflow-hidden shadow-2xl">
+          <iframe
+            src={`/registrations/${id}/contract`}
+            className="w-full h-full border-0 bg-white"
+            title="Contract Preview"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
 
 type Status = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'
 
 const PROGRAM_LABELS: Record<string, { label: string; cls: string }> = {
-  early_bird:   { label: 'Early Bird $350', cls: 'bg-green-50 text-green-700' },
-  memorial_day: { label: 'Memorial Day $300', cls: 'bg-purple-50 text-purple-700' },
-  regular:      { label: 'Regular $400', cls: 'bg-gray-100 text-gray-600' },
+  // new keys
+  basketball_5_sessions: { label: 'Basketball 5 Sessions · $150', cls: 'bg-brand-teal/10 text-brand-teal' },
+  basketball_7_sessions: { label: 'Basketball 7 Sessions · $200', cls: 'bg-brand-teal/10 text-brand-teal' },
+  basketball_drop_in:    { label: 'Basketball Drop-in · $32',     cls: 'bg-blue-50 text-blue-700' },
+  volleyball_5_sessions: { label: 'Volleyball 5 Sessions · $150', cls: 'bg-purple-50 text-purple-700' },
+  volleyball_7_sessions: { label: 'Volleyball 7 Sessions · $200', cls: 'bg-purple-50 text-purple-700' },
+  volleyball_drop_in:    { label: 'Volleyball Drop-in · $32',     cls: 'bg-blue-50 text-blue-700' },
+  // legacy keys
+  basketball_early_bird:   { label: 'Basketball Early Bird · $350',  cls: 'bg-green-50 text-green-700' },
+  basketball_memorial_day: { label: 'Basketball Best Deal · $300',   cls: 'bg-purple-50 text-purple-700' },
+  basketball_regular:      { label: 'Basketball Standard · $400',    cls: 'bg-gray-100 text-gray-600' },
+  volleyball_early_bird:   { label: 'Volleyball Early Bird · $350',  cls: 'bg-green-50 text-green-700' },
+  volleyball_memorial_day: { label: 'Volleyball Best Deal · $300',   cls: 'bg-purple-50 text-purple-700' },
+  volleyball_regular:      { label: 'Volleyball Standard · $400',    cls: 'bg-gray-100 text-gray-600' },
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -71,6 +138,7 @@ function ActionButtons({ id, onDone }: { id: string; onDone: (memberId: string |
 
 function RegistrationCard({ r, onRefresh }: { r: Registration; onRefresh: () => void }) {
   const [result, setResult] = useState<{ approved: boolean; memberId: string | null } | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
   const prog = PROGRAM_LABELS[r.programOption] ?? { label: r.programOption, cls: 'bg-gray-100 text-gray-600' }
 
   function handleDone(memberId: string | null) {
@@ -79,6 +147,8 @@ function RegistrationCard({ r, onRefresh }: { r: Registration; onRefresh: () => 
   }
 
   return (
+    <>
+    {showPreview && <ContractPreviewPanel id={r.id} onClose={() => setShowPreview(false)} />}
     <div className={`bg-white rounded-2xl shadow-sm ring-1 transition-all duration-300 ${
       result ? (result.approved ? 'ring-green-200' : 'ring-red-200') : 'ring-black/5'
     } p-5 flex flex-col gap-4`}>
@@ -133,20 +203,19 @@ function RegistrationCard({ r, onRefresh }: { r: Registration; onRefresh: () => 
         {r.status === 'PENDING' && !result ? (
           <ActionButtons id={r.id} onDone={handleDone} />
         ) : (r.status === 'APPROVED' || result?.approved) ? (
-          <a
-            href={`/registrations/${r.id}/contract`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-gray-50 text-gray-600 rounded-full hover:bg-gray-100 transition-all ring-1 ring-black/10"
+          <button
+            onClick={() => setShowPreview(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-gray-50 text-gray-600 rounded-full hover:bg-gray-100 active:scale-95 transition-all ring-1 ring-black/10"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-              <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
             </svg>
-            Print Contract
-          </a>
+            Preview Contract
+          </button>
         ) : null}
       </div>
     </div>
+    </>
   )
 }
 
