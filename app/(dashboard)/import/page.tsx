@@ -131,6 +131,46 @@ function parseRevenueCSV(text: string): ParsedRevenue[] {
   return results
 }
 
+// ── Trial Session CSV parser ────────────────────────────────────
+interface ParsedTrial {
+  name: string
+  classTime: string
+  guardianName: string
+  guardianPhone: string
+  email: string
+  age: number | null
+  packageInterest: string
+  classPref: string
+}
+
+function parseTrialCSV(text: string): ParsedTrial[] {
+  const lines = text.split(/\r?\n/)
+  const results: ParsedTrial[] = []
+  // Find header row (contains "Name")
+  let headerIdx = -1
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].toLowerCase().includes(',name,')) { headerIdx = i; break }
+  }
+  if (headerIdx === -1) return results
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const cells = parseCSVRow(lines[i])
+    const name = cells[1]?.trim().replace(/[*#]\s*/, '').replace(/\*.*$/, '').trim()
+    if (!name || /^\d+$/.test(name)) continue
+    const age = parseInt(cells[6] ?? '')
+    results.push({
+      name,
+      classTime: cells[2]?.trim() ?? '',
+      guardianName: cells[3]?.trim() ?? '',
+      guardianPhone: cells[4]?.trim() ?? '',
+      email: cells[7]?.trim() ?? '',
+      age: isNaN(age) ? null : age,
+      packageInterest: cells[8]?.trim() ?? '',
+      classPref: cells[9]?.trim() ?? '',
+    })
+  }
+  return results
+}
+
 // ── Packages CSV parser ─────────────────────────────────────────
 interface ParsedPackage {
   studentName: string
@@ -296,7 +336,7 @@ function parseAttendanceCSV(text: string, year: number): ParseResult {
   return { members, errors }
 }
 
-type Tab = 'attendance' | 'revenue' | 'expenses' | 'packages'
+type Tab = 'attendance' | 'revenue' | 'expenses' | 'packages' | 'trials'
 
 export default function ImportPage() {
   const [activeTab, setActiveTab] = useState<Tab>('attendance')
@@ -452,6 +492,7 @@ export default function ImportPage() {
     { key: 'revenue',    label: 'Revenue',    desc: 'Revenue CSV → Payments' },
     { key: 'expenses',   label: 'Expenses',   desc: 'Expenses CSV → Expenses' },
     { key: 'packages',   label: 'Packages',   desc: 'Student & Packages CSV' },
+    { key: 'trials',     label: 'Trials',     desc: 'Trial Session CSV' },
   ]
 
   return (
@@ -699,6 +740,7 @@ export default function ImportPage() {
       {activeTab === 'revenue'  && <RevenueImportSection />}
       {activeTab === 'expenses' && <ExpensesImportSection />}
       {activeTab === 'packages' && <PackagesImportSection />}
+      {activeTab === 'trials'   && <TrialsImportSection />}
 
       {/* Period delete confirmation modal */}
       {showPeriodModal && periodPreview && (
@@ -1075,6 +1117,87 @@ function PackagesImportSection() {
           className="w-full py-3.5 bg-brand-navy text-white rounded-2xl text-sm font-semibold hover:bg-brand-navy/90 active:scale-95 transition-all disabled:opacity-50"
         >
           {status === 'importing' ? 'Importing…' : `Import ${rows.length} students`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Trials import ───────────────────────────────────────────────
+function TrialsImportSection() {
+  const [rows, setRows] = useState<ParsedTrial[]>([])
+  const [fileName, setFileName] = useState('')
+  const [status, setStatus] = useState<'idle'|'importing'|'done'|'error'>('idle')
+  const [result, setResult] = useState<{ created: number } | null>(null)
+  const [err, setErr] = useState('')
+
+  const handleFile = useCallback((file: File) => {
+    setFileName(file.name); setStatus('idle'); setResult(null)
+    const reader = new FileReader()
+    reader.onload = e => setRows(parseTrialCSV(e.target?.result as string))
+    reader.readAsText(file)
+  }, [])
+
+  async function handleImport() {
+    setStatus('importing'); setErr('')
+    try {
+      const res = await fetch('/api/trials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setErr(data.error ?? 'Import failed'); setStatus('error'); return }
+      setResult(data); setStatus('done')
+    } catch (e) { setErr(String(e)); setStatus('error') }
+  }
+
+  return (
+    <div>
+      <div className="mb-4">
+        <p className="text-sm font-semibold text-gray-700">Trial Session CSV → Trials</p>
+        <p className="text-xs text-gray-400 mt-0.5">
+          Upload your Trial Session spreadsheet. Students are added to the{' '}
+          <a href="/trials" className="text-brand-teal underline">Trials page</a>{' '}
+          where you can mark them as converted when they sign up.
+        </p>
+      </div>
+      <DropZone onFile={handleFile} label={fileName ? `${fileName} — ${rows.length} students` : 'Upload 413 – Trial Session .csv'} />
+
+      {rows.length > 0 && (
+        <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5 mb-4">
+          <div className="space-y-1.5 max-h-64 overflow-y-auto">
+            {rows.map((r, i) => (
+              <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-gray-50 last:border-0 gap-2">
+                <div className="min-w-0">
+                  <span className="font-medium text-gray-800">{r.name}</span>
+                  {r.age && <span className="ml-1.5 text-gray-400">Age {r.age}</span>}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 text-gray-500">
+                  {r.classTime && <span>{r.classTime}</span>}
+                  {r.guardianPhone && <span>{r.guardianPhone}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {status === 'done' && result && (
+        <div className="bg-green-50 rounded-xl p-4 text-sm text-green-700 mb-4">
+          ✓ <strong>{result.created}</strong> trial students imported —{' '}
+          <a href="/trials" className="underline font-semibold">View Trials →</a>
+        </div>
+      )}
+      {status === 'error' && <div className="bg-red-50 rounded-xl p-4 text-sm text-red-600 mb-4">{err}</div>}
+
+      {rows.length > 0 && status !== 'done' && (
+        <button
+          onClick={handleImport}
+          disabled={status === 'importing'}
+          className="w-full py-3.5 bg-brand-navy text-white rounded-2xl text-sm font-semibold hover:bg-brand-navy/90 active:scale-95 transition-all disabled:opacity-50"
+        >
+          {status === 'importing' ? 'Importing…' : `Import ${rows.length} trial students`}
         </button>
       )}
     </div>

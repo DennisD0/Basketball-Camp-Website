@@ -160,6 +160,23 @@ model Registration {
   @@map("registrations")
 }
 
+model TrialStudent {
+  id              String   @id @default(cuid())
+  name            String
+  classTime       String?  @map("class_time")
+  guardianName    String?  @map("guardian_name")
+  guardianPhone   String?  @map("guardian_phone")
+  email           String?
+  age             Int?
+  packageInterest String?  @map("package_interest")
+  classPref       String?  @map("class_pref")
+  notes           String?
+  converted       Boolean  @default(false)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("trial_students")
+}
+
 model Expense {
   id          String   @id @default(cuid())
   description String
