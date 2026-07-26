@@ -494,8 +494,8 @@ export default function ImportPage() {
     { key: 'attendance', label: 'Check-in', desc: 'Check-in CSV (multi-file)' },
     { key: 'revenue',    label: 'Revenue',    desc: 'Revenue CSV → Payments' },
     { key: 'expenses',   label: 'Expenses',   desc: 'Expenses CSV → Expenses' },
-    { key: 'packages',   label: 'Packages',   desc: 'Student & Packages CSV' },
-    { key: 'trials',     label: 'Trials',     desc: 'Trial Session CSV' },
+    { key: 'packages',   label: 'Student & Packages', desc: 'Student & Packages CSV' },
+    { key: 'trials',     label: 'Trial Session',      desc: 'Trial Session CSV' },
   ]
 
   return (
