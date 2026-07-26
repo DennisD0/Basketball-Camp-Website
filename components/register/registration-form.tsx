@@ -7,14 +7,6 @@ function sportProgramKey(sport: string, pkg: string) {
   return `${sport.toLowerCase()}_${pkg}`
 }
 
-const AGE_GROUPS = [
-  'U6 (Ages 5–6)',
-  'U8 (Ages 7–8)',
-  'U10 (Ages 9–10)',
-  'U12 (Ages 11–12)',
-  'U14 (Ages 13–14)',
-  'U16 (Ages 15–16)',
-]
 
 // --- Scroll-to-enable terms modal ---
 function TermsModal({
@@ -73,8 +65,8 @@ function TermsModal({
           <div className="bg-[#F4F2EE] rounded-xl p-4 space-y-2 text-sm">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Registration Summary</p>
             <SummaryRow label="Child" value={form.childName} />
-            <SummaryRow label="Age Group" value={form.ageGroup} />
             <SummaryRow label="Sport" value={form.sport} />
+            <SummaryRow label="Session" value={form.slotTime ? `${form.slotTime} · ${form.slotAges}` : ''} />
             <SummaryRow label="Package" value={pkg ? `${pkg.label} — ${pkg.price}` : form.packageOption} />
             <SummaryRow label="Parent" value={form.parentName} />
             <SummaryRow label="Email" value={form.parentEmail} />
@@ -187,8 +179,10 @@ function buildInitialForm() {
     parentPhone:     '',
     whatsappConsent: false,
     childName:       '',
-    ageGroup:        '',
-    sport:           '' as string,
+    // slot captures sport + day/time + age range together
+    sport:           '',
+    slotTime:        '',
+    slotAges:        '',
     packageOption:   '',
     referredBy:      '',
     mediaConsent:    false,
@@ -221,7 +215,7 @@ export default function RegistrationForm({ initialConfig }: { initialConfig?: Re
     e.preventDefault()
     setError('')
     if (!form.packageOption) { setError('Please select a session package.'); return }
-    if (!form.sport) { setError('Please select a sport.'); return }
+    if (!form.sport || !form.slotTime) { setError('Please select a session slot.'); return }
     if (!form.injuryWaiver || !form.noRefundAck || !form.competingAck) {
       setError('Please agree to all required terms before continuing.'); return
     }
@@ -236,7 +230,7 @@ export default function RegistrationForm({ initialConfig }: { initialConfig?: Re
     setLoading(true)
     setError('')
 
-    const ageValue = form.ageGroup.split(' ')[0]
+    const ageValue = form.slotAges
     const programOption = sportProgramKey(form.sport, form.packageOption)
     const pkg = packages.find(p => p.value === form.packageOption)
 
@@ -250,6 +244,7 @@ export default function RegistrationForm({ initialConfig }: { initialConfig?: Re
         whatsappConsent: form.whatsappConsent,
         childName:       form.childName,
         ageGroup:        ageValue,
+        sessionSlot:     form.slotTime,
         sport:           form.sport,
         programOption,
         packageOption:   form.packageOption,
@@ -350,21 +345,13 @@ export default function RegistrationForm({ initialConfig }: { initialConfig?: Re
         {/* Child */}
         <fieldset>
           <legend className="text-sm font-semibold text-brand-navy mb-3 uppercase tracking-wide">Child</legend>
-          <div className="space-y-4">
-            <Field label="Child's Full Name" required>
-              <input
-                type="text" required placeholder="Alex Smith"
-                value={form.childName} onChange={e => set('childName', e.target.value)}
-                className={inputCls}
-              />
-            </Field>
-            <Field label="Age Group" required>
-              <select required value={form.ageGroup} onChange={e => set('ageGroup', e.target.value)} className={inputCls}>
-                <option value="">Select…</option>
-                {AGE_GROUPS.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </Field>
-          </div>
+          <Field label="Child's Full Name" required>
+            <input
+              type="text" required placeholder="Alex Smith"
+              value={form.childName} onChange={e => set('childName', e.target.value)}
+              className={inputCls}
+            />
+          </Field>
         </fieldset>
 
         <hr className="border-gray-100" />
@@ -427,49 +414,52 @@ export default function RegistrationForm({ initialConfig }: { initialConfig?: Re
           </div>
         </fieldset>
 
-        {/* Sport — revealed after package chosen */}
+        {/* Session slot — revealed after package chosen */}
         <div className={`transition-all duration-300 overflow-hidden ${
-          form.packageOption ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+          form.packageOption ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
         }`}>
           <hr className="border-gray-100 mb-6" />
           <fieldset>
-            <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Sport</legend>
-            <p className="text-xs text-gray-400 mb-3">Select the sport and review the schedule</p>
-            <div className="space-y-2">
-              {sports.map(({ sport: s, slots: schedule }) => {
-                const selected = form.sport === s
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => {
-                      if (selected) { set('sport', ''); set('referredBy', '') }
-                      else { set('sport', s); set('referredBy', '') }
-                    }}
-                    className={`w-full flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all text-left active:scale-[0.98] ${
-                      selected ? 'border-brand-teal bg-brand-teal/5' : 'border-gray-100 hover:border-gray-200'
-                    }`}
-                  >
-                    <span className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
-                      selected ? 'border-brand-teal' : 'border-gray-300'
-                    }`}>
-                      {selected && <span className="w-2 h-2 rounded-full bg-brand-teal" />}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-semibold text-gray-800">{s}</span>
-                      <div className="mt-1.5 space-y-1">
-                        {schedule.map((slot, i) => (
-                          <div key={i} className="flex items-center gap-2 text-xs text-gray-500">
-                            <span className="font-medium text-gray-700">{slot.time}</span>
-                            <span className="text-gray-300">·</span>
-                            <span>{slot.ages}</span>
+            <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Select Your Session</legend>
+            <p className="text-xs text-gray-400 mb-3">Pick the day, time, and age group that fits your child</p>
+            <div className="space-y-3">
+              {sports.map(({ sport: s, slots }) => (
+                <div key={s}>
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 pl-1">{s}</p>
+                  <div className="space-y-2">
+                    {slots.map((slot, i) => {
+                      const isSelected = form.sport === s && form.slotTime === slot.time
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              set('sport', ''); set('slotTime', ''); set('slotAges', ''); set('referredBy', '')
+                            } else {
+                              set('sport', s); set('slotTime', slot.time); set('slotAges', slot.ages); set('referredBy', '')
+                            }
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all text-left active:scale-[0.98] ${
+                            isSelected ? 'border-brand-teal bg-brand-teal/5' : 'border-gray-100 hover:border-gray-200'
+                          }`}
+                        >
+                          <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+                            isSelected ? 'border-brand-teal' : 'border-gray-300'
+                          }`}>
+                            {isSelected && <span className="w-2 h-2 rounded-full bg-brand-teal" />}
+                          </span>
+                          <div className="flex-1 flex items-center gap-2 min-w-0">
+                            <span className="text-sm font-semibold text-gray-800">{slot.time}</span>
+                            <span className="text-gray-300 text-xs">·</span>
+                            <span className="text-sm text-gray-500">{slot.ages}</span>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </fieldset>
         </div>
