@@ -1,6 +1,182 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
+
+// ── Shared utilities ────────────────────────────────────────────
+function parseCSVRow(line: string): string[] {
+  const result: string[] = []
+  let cur = ''
+  let inQuote = false
+  for (const ch of line) {
+    if (ch === '"') { inQuote = !inQuote }
+    else if (ch === ',' && !inQuote) { result.push(cur.trim()); cur = '' }
+    else cur += ch
+  }
+  result.push(cur.trim())
+  return result
+}
+
+const MONTHS: Record<string, number> = {
+  january:1,february:2,march:3,april:4,may:5,june:6,
+  july:7,august:8,september:9,october:10,november:11,december:12,
+  jan:1,feb:2,mar:3,apr:4,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12,
+}
+
+function parseFlexDate(raw: string): string {
+  const s = raw.trim()
+  if (!s) return '2026-01-01'
+  // M/D/YYYY or M/D/YY
+  const mdy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
+  if (mdy) {
+    const yr = mdy[3].length === 2 ? 2000 + +mdy[3] : +mdy[3]
+    return `${yr}-${mdy[1].padStart(2,'0')}-${mdy[2].padStart(2,'0')}`
+  }
+  const lower = s.toLowerCase()
+  // "EndMarch-April" edge case
+  if (lower.includes('endmarch')) return '2026-03-31'
+  for (const [name, mo] of Object.entries(MONTHS)) {
+    const yr = mo >= 10 ? 2025 : 2026
+    // exact month name
+    if (lower === name) return `${yr}-${String(mo).padStart(2,'0')}-01`
+    // "Nov 21" or "Nov 21-22"
+    const dm = lower.match(new RegExp(`^${name}\\s+(\\d{1,2})`))
+    if (dm) return `${yr}-${String(mo).padStart(2,'0')}-${dm[1].padStart(2,'0')}`
+    // "Nov week 1" or "December week 2"
+    const wm = lower.match(new RegExp(`^(?:end)?${name}(?:-\\w+)?\\s+week\\s+(\\d)`))
+    if (wm) {
+      const day = Math.min((+wm[1]-1)*7+1, 28)
+      return `${yr}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+    }
+    // "April 1" — month name then day with space
+    const ap = lower.match(new RegExp(`^${name}\\s+(\\d+)$`))
+    if (ap) return `${yr}-${String(mo).padStart(2,'0')}-${ap[1].padStart(2,'0')}`
+  }
+  return '2026-01-01'
+}
+
+// ── Expenses CSV parser ─────────────────────────────────────────
+interface ParsedExpense {
+  dateStr: string
+  date: string
+  description: string
+  category: string
+  paidBy: string
+  amount: number
+  notes: string
+}
+
+function mapExpenseCategory(raw: string): string {
+  const r = raw.toLowerCase()
+  if (r.includes('facility') || r.includes('rent')) return 'Gym / Facility'
+  if (r.includes('equip')) return 'Equipment'
+  if (r.includes('uniform')) return 'Uniforms'
+  if (r.includes('market')) return 'Marketing'
+  return 'Miscellaneous'
+}
+
+function parseExpensesCSV(text: string): ParsedExpense[] {
+  const lines = text.split(/\r?\n/)
+  const results: ParsedExpense[] = []
+  for (let i = 1; i < lines.length; i++) {
+    const cells = parseCSVRow(lines[i])
+    const amountRaw = cells[4]?.replace(/[$,]/g, '').trim()
+    const amount = parseFloat(amountRaw ?? '')
+    if (!amount || isNaN(amount)) continue
+    const description = cells[1]?.trim()
+    if (!description) continue
+    results.push({
+      dateStr: cells[0]?.trim() ?? '',
+      date: parseFlexDate(cells[0] ?? ''),
+      description,
+      category: mapExpenseCategory(cells[2] ?? ''),
+      paidBy: cells[3]?.trim() ?? '',
+      amount,
+      notes: cells[5]?.trim() ?? '',
+    })
+  }
+  return results
+}
+
+// ── Revenue CSV parser ──────────────────────────────────────────
+interface ParsedRevenue {
+  date: string
+  dateStr: string
+  studentName: string
+  packageType: string
+  paymentMethod: string
+  amount: number
+  notes: string
+}
+
+function parseRevenueCSV(text: string): ParsedRevenue[] {
+  const lines = text.split(/\r?\n/)
+  const results: ParsedRevenue[] = []
+  for (let i = 1; i < lines.length; i++) {
+    const cells = parseCSVRow(lines[i])
+    const amountRaw = cells[4]?.replace(/[$,]/g, '').trim()
+    const amount = parseFloat(amountRaw ?? '')
+    if (!amount || isNaN(amount)) continue
+    const studentName = cells[1]?.trim()
+    if (!studentName) continue
+    results.push({
+      dateStr: cells[0]?.trim() ?? '',
+      date: parseFlexDate(cells[0] ?? ''),
+      studentName,
+      packageType: cells[2]?.trim() ?? '',
+      paymentMethod: cells[3]?.trim() ?? '',
+      amount,
+      notes: cells[5]?.trim() ?? '',
+    })
+  }
+  return results
+}
+
+// ── Packages CSV parser ─────────────────────────────────────────
+interface ParsedPackage {
+  studentName: string
+  firstName: string
+  lastName: string
+  guardianName: string
+  guardianPhone: string
+  packageType: string
+  sessionsTotal: number
+  sessionsUsed: number
+  sessionsLeft: number
+  amountPaid: number
+  classes: string
+}
+
+function parsePackagesCSV(text: string): ParsedPackage[] {
+  const lines = text.split(/\r?\n/)
+  const results: ParsedPackage[] = []
+  for (let i = 1; i < lines.length; i++) {
+    const cells = parseCSVRow(lines[i])
+    const studentName = cells[0]?.trim()
+    if (!studentName) continue
+    const amountRaw = cells[7]?.replace(/[$,]/g, '').trim()
+    const amount = parseFloat(amountRaw ?? '0') || 0
+    const parts = studentName.split(/\s+/)
+    // Handle quoted names like 'Soichiro "Z" Abe'
+    const clean = studentName.replace(/["]/g, '').trim()
+    const cleanParts = clean.split(/\s+/)
+    const classes = [cells[8], cells[9]].filter(c => c?.trim()).join(', ')
+    results.push({
+      studentName: clean,
+      firstName: cleanParts[0],
+      lastName: cleanParts.slice(1).join(' '),
+      guardianName: cells[1]?.trim() ?? '',
+      guardianPhone: cells[2]?.trim() ?? '',
+      packageType: cells[3]?.trim() ?? '',
+      sessionsTotal: parseInt(cells[4] ?? '0') || 0,
+      sessionsUsed: parseInt(cells[5] ?? '0') || 0,
+      sessionsLeft: parseInt(cells[6] ?? '0') || 0,
+      amountPaid: amount,
+      classes,
+    })
+    void parts // suppress unused warning
+  }
+  return results
+}
 
 interface ParsedMember {
   name: string
@@ -59,9 +235,9 @@ function parseAttendanceCSV(text: string, year: number): ParseResult {
     }
 
     // Detect class time row (e.g. "4pm class", "5pm class", "2:00 PM")
+    // Don't reset inStudentSection — some sheets share a Name header across time slots
     if (nonEmpty.length === 1 && /\d+\s*(am|pm)/i.test(nonEmpty[0])) {
       currentTime = nonEmpty[0].replace(/\s*class\s*/i, '').trim()
-      inStudentSection = false
       continue
     }
 
@@ -120,7 +296,10 @@ function parseAttendanceCSV(text: string, year: number): ParseResult {
   return { members, errors }
 }
 
+type Tab = 'attendance' | 'revenue' | 'expenses' | 'packages'
+
 export default function ImportPage() {
+  const [activeTab, setActiveTab] = useState<Tab>('attendance')
   const fileRef = useRef<HTMLInputElement>(null)
   const [year, setYear] = useState(new Date().getFullYear())
   const [fileResults, setFileResults] = useState<{ name: string; result: ParseResult }[]>([])
@@ -268,13 +447,20 @@ export default function ImportPage() {
   const allErrors = fileResults.flatMap(f => f.result.errors.map(e => `${f.name}: ${e}`))
   const totalAttendance = merged.reduce((s, m) => s + m.attendanceDates.length, 0)
 
+  const tabs: { key: Tab; label: string; desc: string }[] = [
+    { key: 'attendance', label: 'Attendance', desc: 'Check-in CSV (multi-file)' },
+    { key: 'revenue',    label: 'Revenue',    desc: 'Revenue CSV → Payments' },
+    { key: 'expenses',   label: 'Expenses',   desc: 'Expenses CSV → Expenses' },
+    { key: 'packages',   label: 'Packages',   desc: 'Student & Packages CSV' },
+  ]
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="font-condensed font-bold text-2xl text-brand-navy tracking-wide">Import from Google Sheets</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Export each class CSV (File → Download → CSV) and upload them all at once — multiple files are merged automatically.
+            Export each sheet as CSV and import it here. Select the matching tab for each file type.
           </p>
         </div>
         <button
@@ -290,6 +476,25 @@ export default function ImportPage() {
           Reset All Data
         </button>
       </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-1.5 mb-5 bg-gray-100 p-1 rounded-2xl">
+        {tabs.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeTab === t.key
+                ? 'bg-white text-brand-navy shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'attendance' && <>
 
       {/* Delete by Period */}
       <div className="bg-white rounded-2xl shadow-sm ring-1 ring-black/5 mb-4 overflow-hidden">
@@ -489,6 +694,12 @@ export default function ImportPage() {
         </>
       )}
 
+      </> /* end attendance tab */}
+
+      {activeTab === 'revenue'  && <RevenueImportSection />}
+      {activeTab === 'expenses' && <ExpensesImportSection />}
+      {activeTab === 'packages' && <PackagesImportSection />}
+
       {/* Period delete confirmation modal */}
       {showPeriodModal && periodPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -580,6 +791,303 @@ export default function ImportPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Shared drop-zone ────────────────────────────────────────────
+function DropZone({ onFile, label }: { onFile: (f: File) => void; label: string }) {
+  const ref = useRef<HTMLInputElement>(null)
+  return (
+    <div
+      className="bg-white rounded-2xl p-8 shadow-sm ring-1 ring-black/5 mb-5 text-center cursor-pointer hover:ring-brand-teal/40 transition-all"
+      onClick={() => ref.current?.click()}
+      onDragOver={e => e.preventDefault()}
+      onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) onFile(f) }}
+    >
+      <input ref={ref} type="file" accept=".csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f) }} />
+      <div className="w-12 h-12 rounded-2xl bg-brand-navy/5 flex items-center justify-center mx-auto mb-3">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-brand-navy/40">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+      </div>
+      <p className="font-semibold text-brand-navy text-sm">{label}</p>
+      <p className="text-xs text-gray-400 mt-1">Tap to choose or drag & drop a CSV file</p>
+    </div>
+  )
+}
+
+// ── Revenue import ──────────────────────────────────────────────
+function RevenueImportSection() {
+  const [rows, setRows] = useState<ParsedRevenue[]>([])
+  const [fileName, setFileName] = useState('')
+  const [status, setStatus] = useState<'idle'|'importing'|'done'|'error'>('idle')
+  const [result, setResult] = useState<{ paymentsCreated: number; membersCreated: number; errors: string[] } | null>(null)
+  const [err, setErr] = useState('')
+
+  const handleFile = useCallback((file: File) => {
+    setFileName(file.name)
+    setStatus('idle'); setResult(null)
+    const reader = new FileReader()
+    reader.onload = e => setRows(parseRevenueCSV(e.target?.result as string))
+    reader.readAsText(file)
+  }, [])
+
+  async function handleImport() {
+    setStatus('importing'); setErr('')
+    try {
+      const res = await fetch('/api/finances/payments/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setErr(data.error ?? 'Import failed'); setStatus('error'); return }
+      setResult(data); setStatus('done')
+    } catch (e) { setErr(String(e)); setStatus('error') }
+  }
+
+  const total = rows.reduce((s, r) => s + r.amount, 0)
+
+  return (
+    <div>
+      <div className="mb-4">
+        <p className="text-sm font-semibold text-gray-700">Revenue CSV → Payments</p>
+        <p className="text-xs text-gray-400 mt-0.5">Upload your Revenue spreadsheet. Students are matched to existing members by name — new names become stub members.</p>
+      </div>
+      <DropZone onFile={handleFile} label={fileName ? `${fileName} — ${rows.length} rows` : 'Upload 413 – Revenue .csv'} />
+
+      {rows.length > 0 && (
+        <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5 mb-4">
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <StatTile label="Payments" value={String(rows.length)} />
+            <StatTile label="Total" value={`$${total.toLocaleString()}`} />
+            <StatTile label="Date range" value={`${rows[rows.length-1]?.dateStr} – ${rows[0]?.dateStr}`} />
+          </div>
+          <div className="space-y-1.5 max-h-56 overflow-y-auto">
+            {rows.map((r, i) => (
+              <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-gray-50 last:border-0 gap-2">
+                <div className="min-w-0">
+                  <span className="font-medium text-gray-800 truncate">{r.studentName}</span>
+                  {r.packageType && <span className="ml-1.5 text-gray-400">{r.packageType}</span>}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-gray-400">{r.paymentMethod || '—'}</span>
+                  <span className="font-semibold text-brand-teal">${r.amount}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {status === 'done' && result && (
+        <div className="bg-green-50 rounded-xl p-4 text-sm text-green-700 mb-4 space-y-1">
+          <p>✓ <strong>{result.paymentsCreated}</strong> payments imported</p>
+          {result.membersCreated > 0 && <p>✓ <strong>{result.membersCreated}</strong> new members created</p>}
+          {result.errors.length > 0 && <p className="text-amber-600 text-xs">{result.errors.length} skipped — check console</p>}
+        </div>
+      )}
+      {status === 'error' && <div className="bg-red-50 rounded-xl p-4 text-sm text-red-600 mb-4">{err}</div>}
+
+      {rows.length > 0 && status !== 'done' && (
+        <button
+          onClick={handleImport}
+          disabled={status === 'importing'}
+          className="w-full py-3.5 bg-brand-navy text-white rounded-2xl text-sm font-semibold hover:bg-brand-navy/90 active:scale-95 transition-all disabled:opacity-50"
+        >
+          {status === 'importing' ? 'Importing…' : `Import ${rows.length} payments`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Expenses import ─────────────────────────────────────────────
+function ExpensesImportSection() {
+  const [rows, setRows] = useState<ParsedExpense[]>([])
+  const [fileName, setFileName] = useState('')
+  const [status, setStatus] = useState<'idle'|'importing'|'done'|'error'>('idle')
+  const [result, setResult] = useState<{ created: number } | null>(null)
+  const [err, setErr] = useState('')
+
+  const handleFile = useCallback((file: File) => {
+    setFileName(file.name); setStatus('idle'); setResult(null)
+    const reader = new FileReader()
+    reader.onload = e => setRows(parseExpensesCSV(e.target?.result as string))
+    reader.readAsText(file)
+  }, [])
+
+  async function handleImport() {
+    setStatus('importing'); setErr('')
+    try {
+      const res = await fetch('/api/expenses/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expenses: rows }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setErr(data.error ?? 'Import failed'); setStatus('error'); return }
+      setResult(data); setStatus('done')
+    } catch (e) { setErr(String(e)); setStatus('error') }
+  }
+
+  const total = rows.reduce((s, r) => s + r.amount, 0)
+
+  return (
+    <div>
+      <div className="mb-4">
+        <p className="text-sm font-semibold text-gray-700">Expenses CSV → Expenses</p>
+        <p className="text-xs text-gray-400 mt-0.5">Upload your Expenses spreadsheet. Dates like "Nov week 1" or "Oct" are parsed automatically.</p>
+      </div>
+      <DropZone onFile={handleFile} label={fileName ? `${fileName} — ${rows.length} rows` : 'Upload 413 – Expenses .csv'} />
+
+      {rows.length > 0 && (
+        <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5 mb-4">
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <StatTile label="Expenses" value={String(rows.length)} />
+            <StatTile label="Total" value={`$${total.toLocaleString()}`} color="orange" />
+            <StatTile label="Categories" value={String(new Set(rows.map(r => r.category)).size)} />
+          </div>
+          <div className="space-y-1.5 max-h-56 overflow-y-auto">
+            {rows.map((r, i) => (
+              <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-gray-50 last:border-0 gap-2">
+                <div className="min-w-0">
+                  <span className="font-medium text-gray-800 truncate">{r.description}</span>
+                  <span className="ml-1.5 text-gray-400">{r.category}</span>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-gray-400">{r.dateStr || r.date}</span>
+                  <span className="font-semibold text-brand-orange">${r.amount.toFixed(2)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {status === 'done' && result && (
+        <div className="bg-green-50 rounded-xl p-4 text-sm text-green-700 mb-4">
+          ✓ <strong>{result.created}</strong> expenses imported
+        </div>
+      )}
+      {status === 'error' && <div className="bg-red-50 rounded-xl p-4 text-sm text-red-600 mb-4">{err}</div>}
+
+      {rows.length > 0 && status !== 'done' && (
+        <button
+          onClick={handleImport}
+          disabled={status === 'importing'}
+          className="w-full py-3.5 bg-brand-navy text-white rounded-2xl text-sm font-semibold hover:bg-brand-navy/90 active:scale-95 transition-all disabled:opacity-50"
+        >
+          {status === 'importing' ? 'Importing…' : `Import ${rows.length} expenses`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Packages import ─────────────────────────────────────────────
+function PackagesImportSection() {
+  const [rows, setRows] = useState<ParsedPackage[]>([])
+  const [fileName, setFileName] = useState('')
+  const [status, setStatus] = useState<'idle'|'importing'|'done'|'error'>('idle')
+  const [result, setResult] = useState<{ created: number; updated: number; errors: string[] } | null>(null)
+  const [err, setErr] = useState('')
+
+  const handleFile = useCallback((file: File) => {
+    setFileName(file.name); setStatus('idle'); setResult(null)
+    const reader = new FileReader()
+    reader.onload = e => setRows(parsePackagesCSV(e.target?.result as string))
+    reader.readAsText(file)
+  }, [])
+
+  async function handleImport() {
+    setStatus('importing'); setErr('')
+    try {
+      const payload = rows.map(r => ({
+        firstName: r.firstName,
+        lastName: r.lastName,
+        guardianName: r.guardianName,
+        guardianPhone: r.guardianPhone,
+        packageType: r.packageType,
+        sessionsTotal: r.sessionsTotal,
+        sessionsUsed: r.sessionsUsed,
+        amountPaid: r.amountPaid,
+        teamAssignment: r.classes,
+      }))
+      const res = await fetch('/api/members/import-packages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: payload }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setErr(data.error ?? 'Import failed'); setStatus('error'); return }
+      setResult(data); setStatus('done')
+    } catch (e) { setErr(String(e)); setStatus('error') }
+  }
+
+  return (
+    <div>
+      <div className="mb-4">
+        <p className="text-sm font-semibold text-gray-700">Student & Packages CSV → Members</p>
+        <p className="text-xs text-gray-400 mt-0.5">Creates or updates members with package type, session counts, guardian info, and class assignments. Existing members are matched by name.</p>
+      </div>
+      <DropZone onFile={handleFile} label={fileName ? `${fileName} — ${rows.length} students` : 'Upload 413 – Student&Packages .csv'} />
+
+      {rows.length > 0 && (
+        <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5 mb-4">
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <StatTile label="Students" value={String(rows.length)} />
+            <StatTile label="Packages" value={String(new Set(rows.map(r => r.packageType)).size)} />
+            <StatTile label="Total paid" value={`$${rows.reduce((s,r)=>s+r.amountPaid,0).toLocaleString()}`} color="teal" />
+          </div>
+          <div className="space-y-1.5 max-h-56 overflow-y-auto">
+            {rows.map((r, i) => (
+              <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-gray-50 last:border-0 gap-2">
+                <div className="min-w-0">
+                  <span className="font-medium text-gray-800">{r.studentName}</span>
+                  {r.guardianName && <span className="ml-1.5 text-gray-400">{r.guardianName}</span>}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 text-gray-500">
+                  <span>{r.packageType}</span>
+                  <span>{r.sessionsUsed}/{r.sessionsTotal} sessions</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {status === 'done' && result && (
+        <div className="bg-green-50 rounded-xl p-4 text-sm text-green-700 mb-4 space-y-1">
+          {result.created > 0 && <p>✓ <strong>{result.created}</strong> new members created</p>}
+          {result.updated > 0 && <p>✓ <strong>{result.updated}</strong> members updated</p>}
+          {result.errors.length > 0 && <p className="text-amber-600 text-xs">{result.errors.length} errors — {result.errors[0]}</p>}
+        </div>
+      )}
+      {status === 'error' && <div className="bg-red-50 rounded-xl p-4 text-sm text-red-600 mb-4">{err}</div>}
+
+      {rows.length > 0 && status !== 'done' && (
+        <button
+          onClick={handleImport}
+          disabled={status === 'importing'}
+          className="w-full py-3.5 bg-brand-navy text-white rounded-2xl text-sm font-semibold hover:bg-brand-navy/90 active:scale-95 transition-all disabled:opacity-50"
+        >
+          {status === 'importing' ? 'Importing…' : `Import ${rows.length} students`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Shared stat tile ────────────────────────────────────────────
+function StatTile({ label, value, color = 'navy' }: { label: string; value: string; color?: 'navy'|'teal'|'orange' }) {
+  const cls = { navy: 'text-brand-navy', teal: 'text-brand-teal', orange: 'text-brand-orange' }[color]
+  return (
+    <div className="bg-brand-navy/5 rounded-xl p-3 text-center">
+      <div className={`text-xl font-bold ${cls}`}>{value}</div>
+      <div className="text-xs text-gray-500 mt-0.5">{label}</div>
     </div>
   )
 }

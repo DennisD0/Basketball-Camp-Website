@@ -49,6 +49,8 @@ model Member {
   guardianEmail String? @map("guardian_email")
   guardianPhone String? @map("guardian_phone")
   sessionsTotal Int     @default(8) @map("sessions_total")
+  sessionsUsed  Int     @default(0) @map("sessions_used")
+  packageType   String? @map("package_type")
 
   attendance    Attendance[]
   payments      Payment[]
@@ -164,6 +166,7 @@ model Expense {
   category    String
   amount      Decimal  @db.Decimal(10, 2)
   date        DateTime
+  paidBy      String?  @map("paid_by")
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@map("expenses")
