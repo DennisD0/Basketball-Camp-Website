@@ -323,7 +323,8 @@ export default function FinanceDashboard({
               <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
               <Tooltip
-                formatter={(v: unknown, name: string | undefined) => [`$${Number(v).toLocaleString()}`, name ? name.charAt(0).toUpperCase() + name.slice(1) : '']}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                formatter={((v: unknown, name: unknown) => [`$${Number(v).toLocaleString()}`, typeof name === 'string' ? name.charAt(0).toUpperCase() + name.slice(1) : '']) as never}
                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', fontSize: '12px' }}
                 cursor={{ fill: '#f9fafb' }}
               />
