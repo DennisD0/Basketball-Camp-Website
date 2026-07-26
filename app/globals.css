@@ -13,6 +13,27 @@
 }
 
 @layer utilities {
+  /* Subtle page-mount rise */
+  @keyframes pageEnter {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .animate-page-enter {
+    animation: pageEnter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-page-enter { animation: none; }
+  }
+  /* Thin neutral scrollbar (desktop) */
+  @media (pointer: fine) {
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #d6d3cd; border-radius: 8px; border: 2px solid #F4F2EE; }
+    ::-webkit-scrollbar-thumb:hover { background: #b8b4ac; }
+  }
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+
   .text-stroke {
     -webkit-text-stroke: 2px currentColor;
     color: transparent;

@@ -7,9 +7,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!cookieStore.has('auth')) redirect('/login')
 
   return (
-    <div className="min-h-screen bg-brand-cream">
+    <div className="min-h-screen bg-[#F4F2EE]">
       <Nav />
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-24 md:pb-8">{children}</main>
+      {/* md+: offset for the fixed 240px sidebar; mobile: full width with bottom-tab padding */}
+      <main className="md:pl-60">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-28 md:pb-10 animate-page-enter">
+          {children}
+        </div>
+      </main>
     </div>
   )
 }

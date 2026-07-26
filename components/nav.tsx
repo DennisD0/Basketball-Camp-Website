@@ -48,16 +48,6 @@ const NAV_LINKS = [
     ),
   },
   {
-    href: '/expenses',
-    label: 'Expenses',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-        <rect x="2" y="5" width="20" height="14" rx="2" />
-        <line x1="2" y1="10" x2="22" y2="10" />
-      </svg>
-    ),
-  },
-  {
     href: '/trials',
     label: 'Trials',
     icon: (
@@ -81,6 +71,16 @@ const NAV_LINKS = [
   },
 ]
 
+function SignOutIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5 w-[18px] h-[18px]">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  )
+}
+
 export default function Nav() {
   const pathname = usePathname()
   const router = useRouter()
@@ -97,40 +97,59 @@ export default function Nav() {
 
   return (
     <>
-      {/* ── Desktop top nav (md+) ── */}
-      <nav className="hidden md:block bg-brand-teal text-white shadow-md shadow-[#2C6E6A]/30">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 flex items-center h-14 gap-6">
-          <div className="flex items-center gap-2.5 flex-shrink-0 mr-4">
-            <img src="/Logo.jpg" alt="413" className="h-8 w-8 rounded-xl object-cover shadow-sm" />
-            <span className="font-condensed font-700 text-base tracking-wide whitespace-nowrap uppercase">413 Youth Club</span>
+      {/* ── Desktop left sidebar (md+) ── */}
+      <aside className="hidden md:flex flex-col fixed inset-y-0 left-0 w-60 bg-white border-r border-black/5 z-40">
+        {/* Brand */}
+        <div className="flex items-center gap-3 px-5 h-[68px] border-b border-black/5">
+          <img src="/Logo.jpg" alt="413" className="h-9 w-9 rounded-xl object-cover shadow-sm" />
+          <div className="leading-tight">
+            <p className="font-condensed font-bold text-[15px] text-brand-navy tracking-wide uppercase">413 Youth Club</p>
+            <p className="text-[10px] text-gray-400 font-medium">Club Management</p>
           </div>
-          <div className="flex items-center gap-0.5 flex-1">
-            {NAV_LINKS.map(link => (
+        </div>
+
+        {/* Links */}
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {NAV_LINKS.map(link => {
+            const active = isActive(link.href)
+            return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap ${
-                  isActive(link.href)
-                    ? 'bg-white/20 text-white'
-                    : 'text-white/75 hover:bg-white/10 hover:text-white'
+                className={`relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group ${
+                  active
+                    ? 'bg-brand-teal/10 text-brand-teal'
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-brand-navy'
                 }`}
               >
+                {/* Active indicator bar */}
+                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r-full bg-brand-teal transition-all duration-200 ${
+                  active ? 'h-5 opacity-100' : 'h-0 opacity-0'
+                }`} />
+                <span className={active ? 'text-brand-teal' : 'text-gray-400 group-hover:text-brand-navy'}>
+                  {link.icon}
+                </span>
                 {link.label}
               </Link>
-            ))}
-          </div>
+            )
+          })}
+        </nav>
+
+        {/* Sign out */}
+        <div className="px-3 py-4 border-t border-black/5">
           <button
             onClick={handleSignOut}
-            className="text-xs px-3.5 py-2 rounded-lg text-white/75 hover:bg-white/10 hover:text-white transition-all duration-150 whitespace-nowrap flex-shrink-0"
+            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:bg-red-50 hover:text-red-500 transition-all duration-150"
           >
+            <SignOutIcon />
             Sign out
           </button>
         </div>
-      </nav>
+      </aside>
 
       {/* ── Mobile top bar (< md) ── */}
       <nav className="md:hidden bg-brand-teal text-white shadow-md shadow-[#2C6E6A]/30">
-        <div className="flex items-center justify-between px-4 h-13" style={{ height: '52px' }}>
+        <div className="flex items-center justify-between px-4" style={{ height: '52px' }}>
           <div className="flex items-center gap-2.5">
             <img src="/Logo.jpg" alt="413" className="h-8 w-8 rounded-xl object-cover shadow-sm" />
             <span className="font-condensed font-bold text-base tracking-wide uppercase">413 Youth Club</span>
