@@ -491,7 +491,7 @@ export default function ImportPage() {
   const totalAttendance = merged.reduce((s, m) => s + m.attendanceDates.length, 0)
 
   const tabs: { key: Tab; label: string; desc: string }[] = [
-    { key: 'attendance', label: 'Attendance', desc: 'Check-in CSV (multi-file)' },
+    { key: 'attendance', label: 'Check-in', desc: 'Check-in CSV (multi-file)' },
     { key: 'revenue',    label: 'Revenue',    desc: 'Revenue CSV → Payments' },
     { key: 'expenses',   label: 'Expenses',   desc: 'Expenses CSV → Expenses' },
     { key: 'packages',   label: 'Packages',   desc: 'Student & Packages CSV' },
