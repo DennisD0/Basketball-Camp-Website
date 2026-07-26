@@ -18,6 +18,8 @@ export async function DELETE() {
     await Promise.all([
       prisma.member.deleteMany(),
       prisma.session.deleteMany(),
+      prisma.expense.deleteMany(),
+      prisma.trialStudent.deleteMany(),
     ])
     return NextResponse.json({ ok: true })
   } catch (err) {

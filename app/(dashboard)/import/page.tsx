@@ -31,6 +31,9 @@ function parseFlexDate(raw: string): string {
     const yr = mdy[3].length === 2 ? 2000 + +mdy[3] : +mdy[3]
     return `${yr}-${mdy[1].padStart(2,'0')}-${mdy[2].padStart(2,'0')}`
   }
+  // "M/D+M/D" range (e.g. "6/16+6/20") — take the first date, assume 2026
+  const mdPlus = s.match(/^(\d{1,2})\/(\d{1,2})\+/)
+  if (mdPlus) return `2026-${mdPlus[1].padStart(2,'0')}-${mdPlus[2].padStart(2,'0')}`
   const lower = s.toLowerCase()
   // "EndMarch-April" edge case
   if (lower.includes('endmarch')) return '2026-03-31'
@@ -82,13 +85,13 @@ function parseExpensesCSV(text: string): ParsedExpense[] {
     const amountRaw = cells[4]?.replace(/[$,]/g, '').trim()
     const amount = parseFloat(amountRaw ?? '')
     if (!amount || isNaN(amount)) continue
-    const description = cells[1]?.trim()
-    if (!description) continue
+    const rawCategory = cells[2]?.trim() ?? ''
+    const description = cells[1]?.trim() || mapExpenseCategory(rawCategory) || 'Expense'
     results.push({
       dateStr: cells[0]?.trim() ?? '',
       date: parseFlexDate(cells[0] ?? ''),
       description,
-      category: mapExpenseCategory(cells[2] ?? ''),
+      category: mapExpenseCategory(rawCategory),
       paidBy: cells[3]?.trim() ?? '',
       amount,
       notes: cells[5]?.trim() ?? '',
@@ -154,7 +157,7 @@ function parseTrialCSV(text: string): ParsedTrial[] {
   if (headerIdx === -1) return results
   for (let i = headerIdx + 1; i < lines.length; i++) {
     const cells = parseCSVRow(lines[i])
-    const name = cells[1]?.trim().replace(/[*#]\s*/, '').replace(/\*.*$/, '').trim()
+    const name = cells[1]?.trim().replace(/\s*[*#].*$/, '').trim()
     if (!name || /^\d+$/.test(name)) continue
     const age = parseInt(cells[6] ?? '')
     results.push({
@@ -195,10 +198,10 @@ function parsePackagesCSV(text: string): ParsedPackage[] {
     if (!studentName) continue
     const amountRaw = cells[7]?.replace(/[$,]/g, '').trim()
     const amount = parseFloat(amountRaw ?? '0') || 0
-    const parts = studentName.split(/\s+/)
-    // Handle quoted names like 'Soichiro "Z" Abe'
-    const clean = studentName.replace(/["]/g, '').trim()
+    // Handle quoted names like 'Soichiro "Z" Abe' and strip parentheticals like "(short)"
+    const clean = studentName.replace(/["]/g, '').replace(/\s*\([^)]*\)\s*/g, ' ').trim()
     const cleanParts = clean.split(/\s+/)
+    const parts = cleanParts
     const classes = [cells[8], cells[9]].filter(c => c?.trim()).join(', ')
     results.push({
       studentName: clean,

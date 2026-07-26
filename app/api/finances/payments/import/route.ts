@@ -12,7 +12,10 @@ interface RevenueRow {
 }
 
 function normalize(s: string) {
-  return s.toLowerCase().trim().replace(/\s+/g, ' ').replace(/[*"()]/g, '').trim()
+  return s.toLowerCase().trim()
+    .replace(/\s*\([^)]*\)/g, '')   // strip "(short)", "(tall)", etc.
+    .replace(/[*"]/g, '')
+    .replace(/\s+/g, ' ').trim()
 }
 
 function mapMethod(raw: string): 'CASH' | 'BANK_TRANSFER' {
