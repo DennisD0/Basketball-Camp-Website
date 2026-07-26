@@ -1,26 +1,7 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
-
-const SESSION_PACKAGES = [
-  { value: '5_sessions', label: '5 Sessions', price: '$150', sessions: 5, description: '5 classes · complete within 7 weeks', badge: null },
-  { value: '7_sessions', label: '7 Sessions', price: '$200', sessions: 7, description: '7 classes · complete within 9 weeks', badge: 'Best Value' },
-  { value: 'drop_in',   label: 'Drop-in',    price: '$32',  sessions: 1,  description: 'Single class · no commitment', badge: null },
-]
-
-const SPORTS = ['Basketball', 'Volleyball'] as const
-type Sport = typeof SPORTS[number]
-
-const SPORT_SCHEDULES: Record<Sport, { time: string; ages: string }[]> = {
-  Basketball: [
-    { time: 'Tue 4–5PM', ages: 'Ages 7–12' },
-    { time: 'Fri 4–5PM', ages: 'Ages 5–9' },
-    { time: 'Fri 5–6PM', ages: 'Ages 9–12' },
-  ],
-  Volleyball: [
-    { time: 'Sat 1–3PM', ages: 'Middle–High School' },
-  ],
-}
+import { useState, useCallback } from 'react'
+import { DEFAULT_CONFIG, type RegistrationConfig, type ContractSection, type SessionPackage } from '@/lib/registration-config'
 
 function sportProgramKey(sport: string, pkg: string) {
   return `${sport.toLowerCase()}_${pkg}`
@@ -38,6 +19,10 @@ const AGE_GROUPS = [
 // --- Scroll-to-enable terms modal ---
 function TermsModal({
   form,
+  packages,
+  sections,
+  paymentMethod,
+  paymentNote,
   loading,
   canSubmit,
   onScrollBottom,
@@ -46,6 +31,10 @@ function TermsModal({
   error,
 }: {
   form: ReturnType<typeof buildInitialForm>
+  packages: SessionPackage[]
+  sections: ContractSection[]
+  paymentMethod: string
+  paymentNote: string
   loading: boolean
   canSubmit: boolean
   onScrollBottom: () => void
@@ -53,7 +42,7 @@ function TermsModal({
   onClose: () => void
   error: string
 }) {
-  const pkg = SESSION_PACKAGES.find(p => p.value === form.packageOption)
+  const pkg = packages.find(p => p.value === form.packageOption)
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget
@@ -96,45 +85,29 @@ function TermsModal({
           {/* Payment info */}
           <div className="bg-brand-teal/5 rounded-xl p-4 ring-1 ring-brand-teal/20">
             <p className="text-xs font-semibold text-brand-teal uppercase tracking-wider mb-1.5">Payment Instructions</p>
-            <p className="text-sm text-gray-600">Zelle: <span className="font-semibold text-gray-800">347-200-4439</span></p>
-            <p className="text-xs text-gray-400 mt-1.5">Include your child's name in the memo. No spot is held until payment is received.</p>
+            <p className="text-sm text-gray-600">{paymentMethod}</p>
+            <p className="text-xs text-gray-400 mt-1.5">{paymentNote}. No spot is held until payment is received.</p>
           </div>
 
           {/* Terms & Conditions */}
           <div className="rounded-xl border border-gray-200 p-4 text-xs text-gray-600 space-y-3">
             <p className="font-semibold text-gray-800 text-sm">Terms & Conditions</p>
 
-            <div>
-              <p className="font-semibold text-gray-700 mb-1">1. Program Commitment</p>
-              <p>By registering, you agree that your child will participate exclusively in the 413 Youth Club program for the duration of the selected session package (5 or 7 sessions). During this period, your child may not compete on or be rostered for another team or club in the same sport.</p>
-            </div>
+            {/* Contract sections — staff-editable via Registrations → Edit Registration Form */}
+            {sections.map((s, i) => (
+              <div key={i}>
+                <p className="font-semibold text-gray-700 mb-1">{i + 1}. {s.title}</p>
+                <p className="whitespace-pre-line">{s.body}</p>
+              </div>
+            ))}
 
-            <div>
-              <p className="font-semibold text-gray-700 mb-1">2. Injury Liability Waiver</p>
-              <p>Participation in basketball and volleyball carries an inherent risk of injury. By registering, you acknowledge these risks and release 413 Youth Club, its coaches, and staff from liability for any injury that may occur during sessions or events.</p>
-            </div>
-
-            <div>
-              <p className="font-semibold text-gray-700 mb-1">3. No Refund Policy</p>
-              <p>All session packages are non-refundable once purchased. In the event of cancellation by the club (e.g., weather, facility issues), a make-up session will be scheduled. No cash refunds will be issued.</p>
-            </div>
-
-            <div>
-              <p className="font-semibold text-gray-700 mb-1">4. Media Consent</p>
+            {/* Media consent status (dynamic) */}
+            <div className="bg-brand-teal/5 rounded-lg p-3">
+              <p className="font-semibold text-gray-700 mb-1">Your Media Consent Choice</p>
               {form.mediaConsent
                 ? <p>You have consented to allow your child to appear in photos and videos used for promotional and social media purposes.</p>
                 : <p>You have <strong>not</strong> consented to media use. Your child's image will not be used without further permission.</p>
               }
-            </div>
-
-            <div>
-              <p className="font-semibold text-gray-700 mb-1">5. Drop-in Policy</p>
-              <p>Drop-in sessions ($32/class) are pay-per-visit with no package commitment. Drop-in participants may attend available sessions subject to capacity. Drop-in does not apply toward session package counts.</p>
-            </div>
-
-            <div>
-              <p className="font-semibold text-gray-700 mb-1">6. Referral Discount</p>
-              <p>If you were referred by a current member and have provided their name, both parties will receive a 5% discount to be applied and verified by an admin. This offer is exclusive to Volleyball registrations.</p>
             </div>
 
             <div className="bg-gray-50 rounded-lg p-3 mt-2">
@@ -144,7 +117,7 @@ function TermsModal({
                 <AgreementLine ok={form.noRefundAck}   label="No Refund Policy" />
                 <AgreementLine ok={form.mediaConsent}  label="Media Consent" />
                 <AgreementLine ok={form.whatsappConsent} label="WhatsApp Group Communications" />
-                <AgreementLine ok={form.competingAck}  label="Exclusive Participation Agreement (no competing teams)" />
+                <AgreementLine ok={form.competingAck}  label="Session Window Agreement (complete within 7 or 9 weeks)" />
               </ul>
             </div>
 
@@ -229,7 +202,10 @@ function buildInitialForm() {
 
 const inputCls = 'w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-teal/40 bg-white'
 
-export default function RegistrationForm() {
+export default function RegistrationForm({ initialConfig }: { initialConfig?: RegistrationConfig }) {
+  const config = initialConfig ?? DEFAULT_CONFIG
+  const { packages, sports, contractSections, programInfo } = config
+
   const [step, setStep] = useState<'form' | 'success'>('form')
   const [showModal, setShowModal] = useState(false)
   const [canSubmit, setCanSubmit] = useState(false)
@@ -262,7 +238,7 @@ export default function RegistrationForm() {
 
     const ageValue = form.ageGroup.split(' ')[0]
     const programOption = sportProgramKey(form.sport, form.packageOption)
-    const pkg = SESSION_PACKAGES.find(p => p.value === form.packageOption)
+    const pkg = packages.find(p => p.value === form.packageOption)
 
     const res = await fetch('/api/register', {
       method: 'POST',
@@ -321,6 +297,10 @@ export default function RegistrationForm() {
       {showModal && (
         <TermsModal
           form={form}
+          packages={packages}
+          sections={contractSections}
+          paymentMethod={programInfo.paymentMethod}
+          paymentNote={programInfo.paymentNote}
           loading={loading}
           canSubmit={canSubmit}
           onScrollBottom={() => setCanSubmit(true)}
@@ -394,7 +374,7 @@ export default function RegistrationForm() {
           <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Session Package</legend>
           <p className="text-xs text-gray-400 mb-3">Choose how many sessions to purchase</p>
           <div className="space-y-2">
-            {SESSION_PACKAGES.map(p => {
+            {packages.map(p => {
               const selected = form.packageOption === p.value
               return (
                 <button
@@ -423,7 +403,21 @@ export default function RegistrationForm() {
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>
+                      {/* Description broken into two visible chips so clients clearly see what they're buying */}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        {p.description.split(' · ').map((part, i) => (
+                          <span
+                            key={i}
+                            className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                              i === 0
+                                ? 'bg-brand-navy/8 text-brand-navy'
+                                : 'bg-brand-orange/10 text-brand-orange'
+                            }`}
+                          >
+                            {part}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   <span className="text-sm font-bold text-brand-teal flex-shrink-0">{p.price}</span>
@@ -442,9 +436,8 @@ export default function RegistrationForm() {
             <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Sport</legend>
             <p className="text-xs text-gray-400 mb-3">Select the sport and review the schedule</p>
             <div className="space-y-2">
-              {SPORTS.map(s => {
+              {sports.map(({ sport: s, slots: schedule }) => {
                 const selected = form.sport === s
-                const schedule = SPORT_SCHEDULES[s]
                 return (
                   <button
                     key={s}
@@ -528,7 +521,7 @@ export default function RegistrationForm() {
               required
               checked={form.competingAck}
               onChange={v => set('competingAck', v)}
-              label="Exclusive Participation — I understand that my child may not compete on or be rostered for another team in the same sport during the 5- or 7-session program period."
+              label="Session Window — I understand that all purchased sessions must be completed within the program window (7 weeks for the 5-session package; 9 weeks for the 7-session package). Sessions do not carry over beyond the window."
             />
             <Checkbox
               id="media"

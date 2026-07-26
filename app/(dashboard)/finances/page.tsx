@@ -27,14 +27,6 @@ export default async function FinancesPage() {
   const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0)
   const netProfit = revenue - totalExpenses
 
-  const now = new Date()
-  const thisMonth = payments
-    .filter(p => {
-      const d = new Date(p.date)
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-    })
-    .reduce((sum, p) => sum + Number(p.amount), 0)
-
   const paidMemberIds = new Set(payments.map(p => p.memberId))
   const unpaidCount = Math.max(0, activeMembers - paidMemberIds.size)
 
@@ -65,7 +57,6 @@ export default async function FinancesPage() {
       revenue={revenue}
       totalExpenses={totalExpenses}
       netProfit={netProfit}
-      thisMonth={thisMonth}
       unpaidCount={unpaidCount}
       paidCount={paidMemberIds.size}
     />

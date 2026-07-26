@@ -79,8 +79,8 @@ export default function LandingPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[
                 { n: '2', label: 'Sports' },
-                { n: '4 wks', label: 'Program length' },
-                { n: 'U12–U16', label: 'Age groups' },
+                { n: '5–7', label: 'Sessions per package' },
+                { n: 'Ages 5–18', label: 'Age range' },
                 { n: '15 yrs', label: 'Coach experience' },
               ].map(({ n, label }) => (
                 <div key={label} className="bg-white/60 rounded-2xl px-5 py-4 backdrop-blur-sm ring-1 ring-brand-navy/5">
@@ -195,7 +195,7 @@ export default function LandingPage() {
                 accentColor="bg-brand-navy"
                 textColor="text-brand-navy"
                 skills={['Ball-handling & dribbling', 'Shooting mechanics', 'On-ball defense', 'Game IQ & spacing']}
-                scheduleLabel="Mondays + Saturdays"
+                scheduleLabel="Tuesdays + Fridays · Ages 5–12"
                 imageSrc="https://images.unsplash.com/photo-1518614368389-5160c0b0de72?w=800&q=80"
               />
             </AnimateIn>
@@ -206,7 +206,7 @@ export default function LandingPage() {
                 accentColor="bg-brand-teal"
                 textColor="text-brand-teal"
                 skills={['Serving consistency', 'Platform passing', 'Setting fundamentals', 'Match-ready positioning']}
-                scheduleLabel="Mondays + Saturdays"
+                scheduleLabel="Saturdays 1–3PM · MS–HS"
                 imageSrc="https://images.unsplash.com/photo-1659468551117-8255d708e197?w=800&q=80"
               />
             </AnimateIn>
@@ -363,7 +363,7 @@ export default function LandingPage() {
                 <div className="space-y-5">
                   {[
                     { label: 'Location', value: '58-06 Springfield Blvd', sub: 'Oakland Gardens, NY · Free parking' },
-                    { label: 'Dates', value: 'July 6 – August 1, 2026', sub: '4-week summer program' },
+                    { label: 'Packages', value: '5 sessions $150 · 7 sessions $200', sub: 'Complete within 7 or 9 weeks · Drop-in $32' },
                     { label: 'Payment', value: 'Zelle 347-200-4439', sub: 'Include child\'s name in memo' },
                   ].map(({ label, value, sub }) => (
                     <div key={label} className="bg-white rounded-2xl px-5 py-4 ring-1 ring-brand-navy/5">
@@ -380,12 +380,16 @@ export default function LandingPage() {
                 <p className="text-xs font-semibold uppercase tracking-widest text-brand-orange mb-3">Weekly Schedule</p>
                 <div className="bg-white rounded-2xl overflow-hidden ring-1 ring-brand-navy/5 mb-5">
                   {[
-                    { day: 'Mondays', time: '6:30 PM – 8:30 PM' },
-                    { day: 'Saturdays', time: '2:00 PM – 4:00 PM' },
-                  ].map(({ day, time }, i) => (
-                    <div key={day} className={`flex items-center justify-between px-6 py-5 ${i < 1 ? 'border-b border-brand-navy/5' : ''}`}>
-                      <p className="font-semibold text-brand-navy">{day}</p>
-                      <p className="text-brand-navy/55 text-sm">{time}</p>
+                    { day: 'Tuesdays · Basketball', time: '4–5 PM', sub: 'Ages 7–12' },
+                    { day: 'Fridays · Basketball', time: '4–5 PM / 5–6 PM', sub: 'Ages 5–9 / Ages 9–12' },
+                    { day: 'Saturdays · Volleyball', time: '1–3 PM', sub: 'Middle – High School' },
+                  ].map(({ day, time, sub }, i) => (
+                    <div key={day} className={`flex items-center justify-between gap-4 px-6 py-5 ${i < 2 ? 'border-b border-brand-navy/5' : ''}`}>
+                      <div>
+                        <p className="font-semibold text-brand-navy text-sm">{day}</p>
+                        <p className="text-brand-navy/40 text-xs mt-0.5">{sub}</p>
+                      </div>
+                      <p className="text-brand-navy/55 text-sm text-right flex-shrink-0">{time}</p>
                     </div>
                   ))}
                 </div>
@@ -416,9 +420,9 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
             {[
-              { tier: 'Memorial Day', price: '$300', deadline: 'Register by May 31', hot: false, note: 'Best savings' },
-              { tier: 'Early Bird', price: '$350', deadline: 'Register by June 6', hot: true, note: 'Most popular' },
-              { tier: 'Regular', price: '$400', deadline: 'Register by July 5', hot: false, note: 'Full price' },
+              { tier: '5 Sessions', price: '$150', deadline: 'Complete within 7 weeks', hot: false, note: 'Great start' },
+              { tier: '7 Sessions', price: '$200', deadline: 'Complete within 9 weeks', hot: true, note: 'Best value' },
+              { tier: 'Drop-In', price: '$32', deadline: 'One day pass · either sport', hot: false, note: 'No commitment' },
             ].map(({ tier, price, deadline, hot, note }, i) => (
               <AnimateIn key={tier} delay={i * 70}>
                 <div className={`rounded-2xl p-7 ring-1 transition-all duration-200 hover:-translate-y-1 hover:shadow-md h-full flex flex-col ${
@@ -452,7 +456,7 @@ export default function LandingPage() {
 
           <AnimateIn>
             <p className="text-center text-brand-navy/35 text-sm">
-              All plans include the full 4-week program for both sports. No hidden fees.
+              Session packages apply to one sport. Invite a friend to Volleyball and you both get 5% off — just let us know. No hidden fees.
             </p>
           </AnimateIn>
         </div>
@@ -472,7 +476,7 @@ export default function LandingPage() {
 
           <div className="space-y-3">
             {[
-              { q: 'Do kids pick one sport, or can they do both?', a: 'Sessions run both sports on the same schedule. Register for the one you want — or both, if you\'d like.' },
+              { q: 'Do kids pick one sport, or can they do both?', a: 'Each session package applies to one sport — basketball runs Tuesdays and Fridays, volleyball on Saturdays. You can register for both separately, or use a $32 drop-in for either.' },
               { q: 'What skill level is this for?', a: 'All levels. From beginners to players trying to make their school team. Coach Ben adjusts drills per player.' },
               { q: 'What if my child misses a session?', a: 'No make-ups, but Coach Ben will catch them up at the next session personally.' },
               { q: 'How do I pay?', a: 'Zelle to 347-200-4439. Include your child\'s name in the memo. Payment confirms the spot.' },

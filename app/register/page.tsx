@@ -1,6 +1,10 @@
 import RegistrationForm from '@/components/register/registration-form'
+import { getRegistrationConfig } from '@/lib/get-registration-config'
 
-export default function RegisterPage() {
+export default async function RegisterPage() {
+  const { config } = await getRegistrationConfig()
+  const { programInfo } = config
+
   return (
     <div>
       <div className="mb-8">
@@ -12,27 +16,27 @@ export default function RegisterPage() {
       <div className="bg-white rounded-2xl p-6 shadow-sm ring-1 ring-black/5 mb-8">
         <div className="grid sm:grid-cols-2 gap-6">
           <div>
-            <h3 className="font-semibold text-brand-navy mb-3">Program Details</h3>
+            <h3 className="font-semibold text-brand-navy mb-3">Schedule</h3>
             <ul className="space-y-2 text-sm text-gray-600">
-              <li className="flex gap-2"><span className="text-brand-teal">📍</span> 58-06 Springfield Blvd, Oakland Gardens, NY</li>
-              <li className="flex gap-2"><span className="text-brand-teal">📅</span> July 6 – August 1</li>
-              <li className="flex gap-2"><span className="text-brand-teal">🏀</span> Basketball — Mon 6:30–8:30PM · Sat 2:00–4:00PM</li>
-              <li className="flex gap-2"><span className="text-brand-teal">🏐</span> Volleyball — Mon 6:30–8:30PM · Sat 2:00–4:00PM</li>
-              <li className="flex gap-2"><span className="text-brand-teal">🚗</span> Free parking available</li>
+              <li className="flex gap-2"><span>{programInfo.locationLine.split(' ')[0]}</span> {programInfo.locationLine.replace(/^\S+\s*/, '')}</li>
+              {programInfo.scheduleLines.map((line, i) => (
+                <li key={i} className="flex gap-2"><span>{line.split(' ')[0]}</span> {line.replace(/^\S+\s*/, '')}</li>
+              ))}
             </ul>
           </div>
           <div>
-            <h3 className="font-semibold text-brand-navy mb-3">Payment</h3>
+            <h3 className="font-semibold text-brand-navy mb-3">Pricing & Payment</h3>
             <ul className="space-y-2 text-sm text-gray-600">
-              <li>Zelle: <span className="font-medium text-gray-800">347-200-4439</span></li>
-              <li className="text-xs text-gray-400 pt-1">Include child's name in memo</li>
+              {programInfo.pricingLines.map((line, i) => <li key={i}>{line}</li>)}
+              <li className="pt-1">{programInfo.paymentMethod}</li>
+              <li className="text-xs text-gray-400">{programInfo.paymentNote}</li>
             </ul>
           </div>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm ring-1 ring-black/5">
-        <RegistrationForm />
+        <RegistrationForm initialConfig={config} />
       </div>
     </div>
   )

@@ -177,6 +177,14 @@ model TrialStudent {
   @@map("trial_students")
 }
 
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
 model Expense {
   id          String   @id @default(cuid())
   description String

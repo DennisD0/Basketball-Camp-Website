@@ -1,7 +1,7 @@
 import prisma from '@/lib/prisma'
 import RegistrationList from '@/components/registrations/registration-list'
 import AutoRefresh from '@/components/auto-refresh'
-import PricingManager from '@/components/registrations/pricing-manager'
+import RegistrationEditor from '@/components/registrations/registration-editor'
 import EmptyState from '@/components/ui/empty-state'
 
 export default async function RegistrationsPage() {
@@ -31,7 +31,7 @@ export default async function RegistrationsPage() {
               {pendingCount} pending
             </span>
           )}
-          <PricingManager />
+          <RegistrationEditor />
         </div>
       </div>
 

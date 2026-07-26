@@ -18,10 +18,26 @@ type Expense = {
 type Props = {
   payments: Payment[]; expenses: Expense[]
   revenue: number; totalExpenses: number; netProfit: number
-  thisMonth: number; unpaidCount: number; paidCount: number
+  unpaidCount: number; paidCount: number
 }
 
 const PERIOD_WEEKS: Record<string, number> = { '4W': 4, '8W': 8, '3M': 12, '6M': 26, '1Y': 52 }
+
+const REVENUE_PERIODS = [
+  { key: 'week', label: 'Week' },
+  { key: 'month', label: 'Month' },
+  { key: '3months', label: 'Past 3 Months' },
+] as const
+type RevenuePeriod = typeof REVENUE_PERIODS[number]['key']
+
+function sumRevenueForPeriod(payments: Payment[], period: RevenuePeriod) {
+  const now = new Date()
+  const cutoff = new Date()
+  if (period === 'week') cutoff.setDate(now.getDate() - 7)
+  else if (period === 'month') cutoff.setMonth(now.getMonth() - 1)
+  else cutoff.setMonth(now.getMonth() - 3)
+  return payments.filter(p => new Date(p.date) >= cutoff).reduce((s, p) => s + p.amount, 0)
+}
 const METHOD_COLORS = ['#2C6E6A', '#2D3875']
 const CAT_COLORS: Record<string, string> = {
   'Gym / Facility': '#2D3875',
@@ -106,25 +122,33 @@ function TrashIcon() {
   )
 }
 
-const EXPENSE_CATS = ['Gym / Facility', 'Equipment', 'Uniforms', 'Marketing', 'Miscellaneous']
+// Quick-pick categories + free-typed "Other"
+const EXPENSE_CATS = [
+  { value: 'Gym / Facility', label: 'Gym Payment' },
+  { value: 'Equipment', label: 'Equipment' },
+  { value: 'Miscellaneous', label: 'Misc' },
+]
 
 export default function FinanceDashboard({
-  payments, expenses, revenue, totalExpenses, netProfit, thisMonth, unpaidCount, paidCount,
+  payments, expenses, revenue, totalExpenses, netProfit, unpaidCount, paidCount,
 }: Props) {
   const [profitPeriod, setProfitPeriod] = useState('8W')
+  const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriod>('month')
   const [txSearch, setTxSearch] = useState('')
   const [expSearch, setExpSearch] = useState('')
   const [activeTab, setActiveTab] = useState<'payments' | 'expenses'>('payments')
 
   // Expense form state
   const [showExpForm, setShowExpForm] = useState(false)
-  const [expForm, setExpForm] = useState({ description: '', category: EXPENSE_CATS[0], amount: '', date: '' })
+  const [expForm, setExpForm] = useState({ description: '', category: EXPENSE_CATS[0].value, amount: '', date: '' })
+  const [customCategory, setCustomCategory] = useState(false)
   const [expSaving, setExpSaving] = useState(false)
   const [expError, setExpError] = useState('')
   const [localExpenses, setLocalExpenses] = useState(expenses)
 
   const sparkline = useMemo(() => buildSparkline(payments), [payments])
   const weeklyData = useMemo(() => buildWeeklyProfitData(payments, localExpenses, PERIOD_WEEKS[profitPeriod]), [payments, localExpenses, profitPeriod])
+  const periodRevenue = useMemo(() => sumRevenueForPeriod(payments, revenuePeriod), [payments, revenuePeriod])
 
   const methodData = [
     { name: 'Cash', value: payments.filter(p => p.method === 'CASH').reduce((s, p) => s + p.amount, 0) },
@@ -155,7 +179,8 @@ export default function FinanceDashboard({
     if (res.ok) {
       const saved = await res.json()
       setLocalExpenses(prev => [{ ...saved, amount: Number(saved.amount) }, ...prev])
-      setExpForm({ description: '', category: EXPENSE_CATS[0], amount: '', date: '' })
+      setExpForm({ description: '', category: EXPENSE_CATS[0].value, amount: '', date: '' })
+      setCustomCategory(false)
       setShowExpForm(false)
     } else {
       const d = await res.json().catch(() => ({}))
@@ -213,11 +238,26 @@ export default function FinanceDashboard({
           </div>
         </div>
 
-        {/* This Month + members */}
+        {/* Revenue (period-selectable) + members */}
         <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5 flex flex-col justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Revenue This Month</p>
-            <p className="font-condensed font-bold text-3xl text-brand-navy leading-none mt-2">${thisMonth.toLocaleString()}</p>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Revenue</p>
+              <div className="flex gap-1 bg-gray-100 p-0.5 rounded-lg">
+                {REVENUE_PERIODS.map(p => (
+                  <button
+                    key={p.key}
+                    onClick={() => setRevenuePeriod(p.key)}
+                    className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${
+                      revenuePeriod === p.key ? 'bg-white text-brand-navy shadow-sm' : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="font-condensed font-bold text-3xl text-brand-navy leading-none mt-2">${periodRevenue.toLocaleString()}</p>
           </div>
           <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
             <div>
@@ -410,9 +450,45 @@ export default function FinanceDashboard({
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Category *</label>
-                      <select value={expForm.category} onChange={e => setExpForm(f => ({ ...f, category: e.target.value }))} className={inputCls}>
-                        {EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
+                      <div className="flex flex-wrap gap-2">
+                        {EXPENSE_CATS.map(c => {
+                          const selected = !customCategory && expForm.category === c.value
+                          return (
+                            <button
+                              key={c.value}
+                              type="button"
+                              onClick={() => { setCustomCategory(false); setExpForm(f => ({ ...f, category: c.value })) }}
+                              className={`min-h-[44px] px-4 rounded-xl text-xs font-bold uppercase tracking-wide transition-all ${
+                                selected
+                                  ? 'bg-brand-navy text-white shadow-sm'
+                                  : 'bg-gray-50 text-gray-500 ring-1 ring-black/10 hover:bg-gray-100'
+                              }`}
+                            >
+                              {c.label}
+                            </button>
+                          )
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => { setCustomCategory(true); setExpForm(f => ({ ...f, category: '' })) }}
+                          className={`min-h-[44px] px-4 rounded-xl text-xs font-bold uppercase tracking-wide transition-all ${
+                            customCategory
+                              ? 'bg-brand-navy text-white shadow-sm'
+                              : 'bg-gray-50 text-gray-500 ring-1 ring-black/10 hover:bg-gray-100'
+                          }`}
+                        >
+                          Other…
+                        </button>
+                      </div>
+                      {customCategory && (
+                        <input
+                          required type="text" placeholder="Type a category, e.g. Travel"
+                          value={expForm.category}
+                          onChange={e => setExpForm(f => ({ ...f, category: e.target.value }))}
+                          className={`${inputCls} mt-2`}
+                          autoFocus
+                        />
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Amount ($) *</label>
