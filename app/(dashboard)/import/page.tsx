@@ -339,7 +339,7 @@ function parseAttendanceCSV(text: string, year: number): ParseResult {
   return { members, errors }
 }
 
-type Tab = 'attendance' | 'revenue' | 'expenses' | 'packages' | 'trials'
+type Tab = 'attendance' | 'revenue' | 'expenses' | 'packages' | 'trials' | 'profit'
 
 export default function ImportPage() {
   const [activeTab, setActiveTab] = useState<Tab>('attendance')
@@ -496,6 +496,7 @@ export default function ImportPage() {
     { key: 'expenses',   label: 'Expenses',   desc: 'Expenses CSV → Expenses' },
     { key: 'packages',   label: 'Student & Packages', desc: 'Student & Packages CSV' },
     { key: 'trials',     label: 'Trial Session',      desc: 'Trial Session CSV' },
+    { key: 'profit',     label: 'Monthly Profit Tracker', desc: 'Monthly Profit Tracker CSV' },
   ]
 
   return (
@@ -744,6 +745,7 @@ export default function ImportPage() {
       {activeTab === 'expenses' && <ExpensesImportSection />}
       {activeTab === 'packages' && <PackagesImportSection />}
       {activeTab === 'trials'   && <TrialsImportSection />}
+      {activeTab === 'profit'   && <MonthlyProfitImportSection />}
 
       {/* Period delete confirmation modal */}
       {showPeriodModal && periodPreview && (
@@ -1201,6 +1203,127 @@ function TrialsImportSection() {
           className="w-full py-3.5 bg-brand-navy text-white rounded-2xl text-sm font-semibold hover:bg-brand-navy/90 active:scale-95 transition-all disabled:opacity-50"
         >
           {status === 'importing' ? 'Importing…' : `Import ${rows.length} trial students`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Monthly Profit Tracker import ───────────────────────────────
+interface ParsedProfit {
+  period: string
+  totalRevenue: number
+  totalExpenses: number
+  netProfit: number
+  billyShare?: number
+  benShare?: number
+  notes?: string
+}
+
+function parseAmount(v: string): number {
+  return parseFloat(v.replace(/[$,\s]/g, '')) || 0
+}
+
+function parseProfitCSV(raw: string): ParsedProfit[] {
+  const lines = raw.split(/\r?\n/)
+  const rows: ParsedProfit[] = []
+  for (const line of lines) {
+    const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''))
+    const period = cols[0]
+    if (!period || period.toLowerCase() === 'month') continue
+    const totalRevenue = parseAmount(cols[1])
+    const totalExpenses = parseAmount(cols[2])
+    const netProfit = parseAmount(cols[3])
+    if (!totalRevenue && !totalExpenses && !netProfit) continue
+    rows.push({
+      period,
+      totalRevenue,
+      totalExpenses,
+      netProfit,
+      billyShare: parseAmount(cols[4]) || undefined,
+      benShare: parseAmount(cols[5]) || undefined,
+      notes: cols[7] || undefined,
+    })
+  }
+  return rows
+}
+
+function MonthlyProfitImportSection() {
+  const [rows, setRows] = useState<ParsedProfit[]>([])
+  const [fileName, setFileName] = useState('')
+  const [status, setStatus] = useState<'idle'|'importing'|'done'|'error'>('idle')
+  const [result, setResult] = useState<{ created: number; updated: number } | null>(null)
+  const [err, setErr] = useState('')
+
+  const handleFile = useCallback((file: File) => {
+    setFileName(file.name); setStatus('idle'); setResult(null)
+    const reader = new FileReader()
+    reader.onload = e => setRows(parseProfitCSV(e.target?.result as string))
+    reader.readAsText(file)
+  }, [])
+
+  async function handleImport() {
+    setStatus('importing'); setErr('')
+    try {
+      const res = await fetch('/api/monthly-profit/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setErr(data.error ?? 'Import failed'); setStatus('error'); return }
+      setResult(data); setStatus('done')
+    } catch (e) { setErr(String(e)); setStatus('error') }
+  }
+
+  const totalRevenue = rows.reduce((s, r) => s + r.totalRevenue, 0)
+  const totalProfit  = rows.reduce((s, r) => s + r.netProfit, 0)
+
+  return (
+    <div>
+      <div className="mb-4">
+        <p className="text-sm font-semibold text-gray-700">Monthly Profit Tracker CSV → Financial Summary</p>
+        <p className="text-xs text-gray-400 mt-0.5">Upload your Monthly Profit Tracker spreadsheet. Each period is upserted — re-importing updates existing records.</p>
+      </div>
+      <DropZone onFile={handleFile} label={fileName ? `${fileName} — ${rows.length} period${rows.length !== 1 ? 's' : ''}` : 'Upload 413 – Monthly Profit Tracker .csv'} />
+
+      {rows.length > 0 && (
+        <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5 mb-4">
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <StatTile label="Periods" value={String(rows.length)} />
+            <StatTile label="Total Revenue" value={`$${totalRevenue.toLocaleString()}`} color="teal" />
+            <StatTile label="Net Profit" value={`$${totalProfit.toLocaleString()}`} color="orange" />
+          </div>
+          <div className="space-y-1.5 max-h-56 overflow-y-auto">
+            {rows.map((r, i) => (
+              <div key={i} className="flex items-center justify-between text-xs py-1.5 border-b border-gray-50 last:border-0 gap-2">
+                <span className="font-medium text-gray-800">{r.period}</span>
+                <div className="flex items-center gap-3 flex-shrink-0 text-right">
+                  <span className="text-gray-400">Rev <span className="text-gray-700 font-medium">${r.totalRevenue.toLocaleString()}</span></span>
+                  <span className="text-gray-400">Exp <span className="text-gray-700 font-medium">${r.totalExpenses.toLocaleString()}</span></span>
+                  <span className={`font-semibold ${r.netProfit >= 0 ? 'text-brand-teal' : 'text-brand-orange'}`}>${r.netProfit.toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {status === 'done' && result && (
+        <div className="bg-green-50 rounded-xl p-4 text-sm text-green-700 mb-4">
+          ✓ <strong>{result.created}</strong> period{result.created !== 1 ? 's' : ''} created
+          {result.updated > 0 && <>, <strong>{result.updated}</strong> updated</>}
+        </div>
+      )}
+      {status === 'error' && <div className="bg-red-50 rounded-xl p-4 text-sm text-red-600 mb-4">{err}</div>}
+
+      {rows.length > 0 && status !== 'done' && (
+        <button
+          onClick={handleImport}
+          disabled={status === 'importing'}
+          className="w-full py-3.5 bg-brand-navy text-white rounded-2xl text-sm font-semibold hover:bg-brand-navy/90 active:scale-95 transition-all disabled:opacity-50"
+        >
+          {status === 'importing' ? 'Importing…' : `Import ${rows.length} period${rows.length !== 1 ? 's' : ''}`}
         </button>
       )}
     </div>

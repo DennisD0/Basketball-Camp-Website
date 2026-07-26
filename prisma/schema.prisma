@@ -185,6 +185,21 @@ model Setting {
   @@map("settings")
 }
 
+model MonthlyProfit {
+  id            String   @id @default(cuid())
+  period        String   @unique
+  totalRevenue  Decimal  @map("total_revenue") @db.Decimal(10, 2)
+  totalExpenses Decimal  @map("total_expenses") @db.Decimal(10, 2)
+  netProfit     Decimal  @map("net_profit") @db.Decimal(10, 2)
+  billyShare    Decimal? @map("billy_share") @db.Decimal(10, 2)
+  benShare      Decimal? @map("ben_share") @db.Decimal(10, 2)
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("monthly_profits")
+}
+
 model Expense {
   id          String   @id @default(cuid())
   description String
