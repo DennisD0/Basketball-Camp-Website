@@ -93,7 +93,7 @@ export default function RegistrationEditor() {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black/60 backdrop-blur-sm p-3 sm:p-6">
+        <div className="fixed inset-0 z-[60] flex flex-col bg-black/60 backdrop-blur-sm p-3 sm:p-6">
           <div className="bg-white rounded-2xl shadow-2xl flex flex-col max-h-full w-full max-w-3xl mx-auto my-auto overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
