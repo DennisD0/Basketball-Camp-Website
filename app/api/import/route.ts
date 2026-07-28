@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
+import { nameKey, resolveMember } from '@/lib/name-match'
 
 async function requireAuth() {
   const cookieStore = await cookies()
@@ -54,7 +55,7 @@ async function runImport(request: NextRequest) {
   const seen = new Set<string>()
   const validRows = (memberRows ?? []).filter((r: { firstName?: string; lastName?: string }) => {
     if (!r.firstName?.trim()) return false
-    const k = `${r.firstName.trim()} ${(r.lastName ?? '').trim()}`.trim().toLowerCase()
+    const k = nameKey(`${r.firstName} ${r.lastName ?? ''}`)
     if (seen.has(k)) return false
     seen.add(k)
     return true
@@ -64,19 +65,24 @@ async function runImport(request: NextRequest) {
   const existingMembers = await prisma.member.findMany({
     select: { id: true, firstName: true, lastName: true, teamAssignment: true },
   })
-  const existingByKey: Record<string, { id: string; teamAssignment: string | null }> = {}
-  for (const m of existingMembers) {
-    existingByKey[`${m.firstName} ${m.lastName}`.trim().toLowerCase()] = { id: m.id, teamAssignment: m.teamAssignment }
-  }
 
   const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase()
 
-  // --- Batch: update existing + create new in parallel ---
-  await Promise.all(validRows.map(async (row: {
+  // Names the Check-in sheet spells differently from Student & Packages —
+  // resolved rather than duplicated. Reported back so the sheets can be fixed.
+  const aliasResolved: string[] = []
+
+  // --- Sequential: a newly created member must be visible to later rows, so
+  //     name variants ("Ian short" after "Ian Kim (short)") resolve instead of
+  //     racing each other into duplicate rows. Row counts here are small. ---
+  const pool: { id: string; firstName: string; lastName: string; teamAssignment: string | null }[] =
+    existingMembers.map(m => ({ ...m, lastName: m.lastName ?? '' }))
+
+  for (const row of validRows as {
     firstName: string; lastName?: string; dateOfBirth?: string;
     guardianName?: string; guardianEmail?: string; guardianPhone?: string;
     teamAssignment?: string; sessionsTotal?: number;
-  }) => {
+  }[]) {
     const { firstName, lastName, dateOfBirth, guardianName, guardianEmail, guardianPhone, teamAssignment, sessionsTotal } = row
     const data = {
       firstName: firstName.trim(),
@@ -88,18 +94,27 @@ async function runImport(request: NextRequest) {
       teamAssignment: teamAssignment?.trim() || undefined,
       sessionsTotal: sessionsTotal ? Number(sessionsTotal) : undefined,
     }
-    const key = `${data.firstName} ${data.lastName}`.trim().toLowerCase()
-    const existing = existingByKey[key]
+    const raw = `${data.firstName} ${data.lastName}`.trim()
+    const key = nameKey(raw)
+    const existing = resolveMember(raw, pool)
 
     let memberId: string
     if (existing) {
+      const existingFull = `${existing.firstName} ${existing.lastName}`.trim()
+      if (nameKey(existingFull) !== key) {
+        aliasResolved.push(`"${raw}" → existing member "${existingFull}"`)
+      }
       // True duplicate: every importable field is identical — skip entirely
       const isDuplicate = norm(existing.teamAssignment) === norm(data.teamAssignment)
       if (isDuplicate) {
         membersSkipped++
         memberId = existing.id
       } else {
-        const member = await prisma.member.update({ where: { id: existing.id }, data })
+        // Never overwrite a fuller name with a sheet's shorthand ("Brighton"
+        // must not clobber "Brighton Lee"), and never blank out known fields.
+        const { firstName: _f, lastName: _l, ...rest } = data
+        void _f; void _l
+        const member = await prisma.member.update({ where: { id: existing.id }, data: rest })
         membersUpdated++
         memberId = member.id
       }
@@ -107,9 +122,10 @@ async function runImport(request: NextRequest) {
       const member = await prisma.member.create({ data: { ...data, sessionsTotal: data.sessionsTotal ?? 8 } })
       membersCreated++
       memberId = member.id
+      pool.push({ id: member.id, firstName: member.firstName, lastName: member.lastName, teamAssignment: member.teamAssignment })
     }
     memberKeyToId[key] = memberId
-  }))
+  }
 
   // --- Sessions: batch upsert all unique dates in one transaction ---
   const uniqueDates = [...new Set((attendanceRows ?? []).map((r: { date: string }) => r.date))]
@@ -131,7 +147,7 @@ async function runImport(request: NextRequest) {
   // --- Attendance: one createMany with skipDuplicates ---
   const attendanceData = (attendanceRows ?? [])
     .map((r: { memberKey: string; date: string }) => {
-      const memberId = memberKeyToId[r.memberKey.trim().toLowerCase()]
+      const memberId = memberKeyToId[nameKey(r.memberKey)]
       const sessionId = dateToSessionId[r.date]
       if (!memberId || !sessionId) return null
       return { memberId, sessionId, status: 'PRESENT' as const }
@@ -145,5 +161,5 @@ async function runImport(request: NextRequest) {
 
   const attendanceSkipped = attendanceData.length - attendanceCreated
 
-  return NextResponse.json({ membersCreated, membersUpdated, membersSkipped, attendanceCreated, attendanceSkipped })
+  return NextResponse.json({ membersCreated, membersUpdated, membersSkipped, attendanceCreated, attendanceSkipped, aliasResolved })
 }

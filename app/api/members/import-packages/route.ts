@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
+import { resolveMember } from '@/lib/name-match'
 
 interface PackageRow {
   firstName: string
@@ -28,11 +29,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const members = await prisma.member.findMany()
-    const byFull = new Map<string, typeof members[0]>()
-    for (const m of members) {
-      byFull.set(normalize(`${m.firstName} ${m.lastName}`), m)
-    }
+    const pool = (await prisma.member.findMany()).map(m => ({
+      id: m.id, firstName: m.firstName, lastName: m.lastName,
+    }))
 
     let created = 0
     let updated = 0
@@ -40,8 +39,8 @@ export async function POST(req: NextRequest) {
 
     for (const row of rows) {
       if (!row.firstName) continue
-      const key = normalize(`${row.firstName} ${row.lastName ?? ''}`)
-      const existing = byFull.get(key)
+      // strict: this sheet is the roster — never merge two of its own rows
+      const existing = resolveMember(`${row.firstName} ${row.lastName ?? ''}`, pool, { strict: true })
 
       const data = {
         guardianName: row.guardianName || undefined,
@@ -53,23 +52,14 @@ export async function POST(req: NextRequest) {
       }
 
       try {
+        // NOTE: Amount Paid is intentionally NOT written as a Payment here.
+        // The Revenue CSV is the single source of truth for money; creating
+        // payments from this sheet double-counted every package into finances.
         if (existing) {
           await prisma.member.update({ where: { id: existing.id }, data })
-          // Create payment record if amount provided
-          if (row.amountPaid && row.amountPaid > 0) {
-            await prisma.payment.create({
-              data: {
-                memberId: existing.id,
-                amount: row.amountPaid,
-                method: 'CASH',
-                date: new Date('2025-11-21'),
-                notes: `Imported from packages sheet — ${row.packageType ?? ''}`,
-              },
-            })
-          }
           updated++
         } else {
-          const member = await prisma.member.create({
+          const m = await prisma.member.create({
             data: {
               firstName: row.firstName,
               lastName: row.lastName ?? '',
@@ -77,17 +67,7 @@ export async function POST(req: NextRequest) {
               ...data,
             },
           })
-          if (row.amountPaid && row.amountPaid > 0) {
-            await prisma.payment.create({
-              data: {
-                memberId: member.id,
-                amount: row.amountPaid,
-                method: 'CASH',
-                date: new Date('2025-11-21'),
-                notes: `Imported from packages sheet — ${row.packageType ?? ''}`,
-              },
-            })
-          }
+          pool.push({ id: m.id, firstName: m.firstName, lastName: m.lastName })
           created++
         }
       } catch (err) {

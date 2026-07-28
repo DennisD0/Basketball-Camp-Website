@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
+import { resolveMember } from '@/lib/name-match'
 
 interface RevenueRow {
   studentName: string
@@ -9,13 +10,6 @@ interface RevenueRow {
   amount: number
   date: string
   notes?: string
-}
-
-function normalize(s: string) {
-  return s.toLowerCase().trim()
-    .replace(/\s*\([^)]*\)/g, '')   // strip "(short)", "(tall)", etc.
-    .replace(/[*"]/g, '')
-    .replace(/\s+/g, ' ').trim()
 }
 
 function mapMethod(raw: string): 'CASH' | 'BANK_TRANSFER' {
@@ -32,32 +26,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const members = await prisma.member.findMany()
-
-    // Build lookup: normalized full name → member
-    const byFull = new Map<string, typeof members[0]>()
-    const byFirst = new Map<string, typeof members[0][]>()
-    for (const m of members) {
-      const full = normalize(`${m.firstName} ${m.lastName}`)
-      byFull.set(full, m)
-      const first = normalize(m.firstName)
-      if (!byFirst.has(first)) byFirst.set(first, [])
-      byFirst.get(first)!.push(m)
-    }
-
-    function findMember(name: string) {
-      const n = normalize(name)
-      if (byFull.has(n)) return byFull.get(n)!
-      // Try first name only if single-word input
-      const firstWord = n.split(' ')[0]
-      const candidates = byFirst.get(firstWord) ?? []
-      if (candidates.length === 1) return candidates[0]
-      // Partial: member full name contains the input
-      for (const [key, m] of byFull) {
-        if (key.includes(n) || n.includes(key.split(' ')[0])) return m
-      }
-      return null
-    }
+    // Shared resolver — see lib/name-match.ts. Members created here are pushed
+    // back into the pool so later rows with a name variant reuse them.
+    const pool = (await prisma.member.findMany()).map(m => ({
+      id: m.id, firstName: m.firstName, lastName: m.lastName,
+    }))
 
     let paymentsCreated = 0
     let membersCreated = 0
@@ -69,11 +42,11 @@ export async function POST(req: NextRequest) {
         continue
       }
 
-      let member = findMember(row.studentName)
+      let member = resolveMember(row.studentName, pool)
 
       if (!member) {
-        const parts = row.studentName.trim().split(/\s+/)
-        member = await prisma.member.create({
+        const parts = row.studentName.trim().replace(/["*]/g, '').split(/\s+/)
+        const created = await prisma.member.create({
           data: {
             firstName: parts[0],
             lastName: parts.slice(1).join(' '),
@@ -81,9 +54,10 @@ export async function POST(req: NextRequest) {
             packageType: row.packageType || null,
           },
         })
-        // Add to local maps for subsequent rows with same name
-        byFull.set(normalize(`${member.firstName} ${member.lastName}`), member)
+        member = { id: created.id, firstName: created.firstName, lastName: created.lastName }
+        pool.push(member)
         membersCreated++
+        errors.push(`No member matched "${row.studentName}" — created a new one`)
       }
 
       try {

@@ -130,8 +130,10 @@ export default async function AttendanceDatePage({
           ) : (
             <div className="space-y-2">
               {attendees.map(({ member, sessionsAttended }, idx) => {
-                const remaining = Math.max(0, member.sessionsTotal - sessionsAttended)
-                const pct = Math.min(Math.round((sessionsAttended / Math.max(member.sessionsTotal, 1)) * 100), 100)
+                // Honor the carried-over count from the packages sheet
+                const used = Math.max(sessionsAttended, member.sessionsUsed)
+                const remaining = Math.max(0, member.sessionsTotal - used)
+                const pct = Math.min(Math.round((used / Math.max(member.sessionsTotal, 1)) * 100), 100)
                 const colors = sessionColor(remaining)
                 const initials = `${member.firstName[0] ?? ''}${member.lastName?.[0] ?? ''}`.toUpperCase()
                 const bg = avatarColor(member.firstName + member.lastName)
@@ -166,7 +168,7 @@ export default async function AttendanceDatePage({
                       <div className="w-full bg-gray-100 rounded-full h-1.5">
                         <div className={`h-1.5 rounded-full ${colors.bar}`} style={{ width: `${pct}%` }} />
                       </div>
-                      <p className="text-[10px] text-gray-400 mt-1">{sessionsAttended}/{member.sessionsTotal} sessions used</p>
+                      <p className="text-[10px] text-gray-400 mt-1">{used}/{member.sessionsTotal} sessions used</p>
                     </div>
 
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-gray-300 flex-shrink-0">

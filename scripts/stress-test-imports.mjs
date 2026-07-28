@@ -183,12 +183,15 @@ function parsePackagesCSV(text) {
     if (!studentName) continue
     const amountRaw = cells[7]?.replace(/[$,]/g, '').trim()
     const amount = parseFloat(amountRaw ?? '0') || 0
-    // Strip quotes and parentheticals before splitting name
-    const clean = studentName.replace(/["]/g, '').replace(/\s*\([^)]*\)\s*/g, ' ').trim()
-    if (clean !== studentName.replace(/["]/g,'').trim()) {
+    // Keep the parenthetical — it distinguishes "Ian Kim (short)" from "(tall)"
+    const noQuotes = studentName.replace(/["]/g, '').trim()
+    const paren = noQuotes.match(/\(([^)]*)\)/)?.[1]?.trim()
+    const bare = noQuotes.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim()
+    const clean = paren ? `${bare} (${paren})` : bare
+    if (clean !== noQuotes) {
       warnings.push(`  ℹ  Row ${i+1}: "${studentName}" → cleaned to "${clean}"`)
     }
-    const cleanParts = clean.split(/\s+/)
+    const cleanParts = bare.split(/\s+/)
     const classes = [cells[8], cells[9]].filter(c => c?.trim()).join(', ')
     const sessionsTotal = parseInt(cells[4] ?? '0') || 0
     const sessionsUsed = parseInt(cells[5] ?? '0') || 0
@@ -196,7 +199,7 @@ function parsePackagesCSV(text) {
     results.push({
       studentName: clean,
       firstName: cleanParts[0],
-      lastName: cleanParts.slice(1).join(' '),
+      lastName: [cleanParts.slice(1).join(' '), paren && `(${paren})`].filter(Boolean).join(' '),
       guardianName: cells[1]?.trim() ?? '',
       guardianPhone: cells[2]?.trim() ?? '',
       packageType: cells[3]?.trim() ?? '',
@@ -208,6 +211,31 @@ function parsePackagesCSV(text) {
     })
   }
   return { results, warnings }
+}
+
+function parseAmount(v) {
+  return parseFloat((v ?? '').replace(/[$,\s]/g, '')) || 0
+}
+
+function parseProfitCSV(raw) {
+  const lines = raw.split(/\r?\n/)
+  const rows = []
+  for (const line of lines) {
+    const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''))
+    const period = cols[0]
+    if (!period || period.toLowerCase() === 'month') continue
+    const totalRevenue = parseAmount(cols[1])
+    const totalExpenses = parseAmount(cols[2])
+    const netProfit = parseAmount(cols[3])
+    if (!totalRevenue && !totalExpenses && !netProfit) continue
+    rows.push({
+      period, totalRevenue, totalExpenses, netProfit,
+      billyShare: parseAmount(cols[4]) || undefined,
+      benShare: parseAmount(cols[5]) || undefined,
+      notes: cols[7] || undefined,
+    })
+  }
+  return rows
 }
 
 function parseAttendanceCSV(text, year) {
@@ -228,8 +256,13 @@ function parseAttendanceCSV(text, year) {
     return `${year}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`
   }
 
+  const KEEP_QUALIFIER = /^(short|small|tall|big|long)$/i
   function cleanName(raw) {
-    return raw.replace(/\s*\(.*?\)\s*/g, '').trim()
+    return raw
+      .replace(/\s*\((.*?)\)\s*/g, (_, inner) =>
+        KEEP_QUALIFIER.test(inner.trim()) ? ` (${inner.trim()}) ` : ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
   }
 
   for (let i = 0; i < lines.length; i++) {
@@ -404,11 +437,14 @@ async function main() {
   const parenthetical = revenue.filter(r => r.studentName.includes('('))
   info(`${parenthetical.length} parenthetical names: ${parenthetical.map(r => r.studentName).join(', ')}`)
 
-  console.log('\n[Expenses: Monthly Profit Tracker.csv]')
+  console.log('\n[Monthly Profit Tracker.csv]')
   const mptCSV = readCSV('Copy of 413 - Monthly Profit Tracker.csv')
-  const mptLines = mptCSV.split(/\r?\n/).filter(l => l.trim() && !l.match(/^,+$/))
-  info(`Monthly Profit Tracker has ${mptLines.length} non-empty lines — this is a SUMMARY doc, no import tab needed`)
-  pass('Skipped (summary only, no structured import)')
+  const profits = parseProfitCSV(mptCSV)
+  pass(`Parsed ${profits.length} monthly profit rows`)
+  profits.forEach(p => info(`  ${p.period}: rev $${p.totalRevenue} · exp $${p.totalExpenses} · net $${p.netProfit}`))
+  const badNet = profits.filter(p => Math.abs((p.totalRevenue - p.totalExpenses) - p.netProfit) > 0.5)
+  if (badNet.length === 0) pass('Net profit = revenue − expenses on every row')
+  else badNet.forEach(p => warn(`${p.period}: net ${p.netProfit} ≠ ${p.totalRevenue} − ${p.totalExpenses}`))
 
   console.log('\n[Trial Session.csv]')
   const trialCSV = readCSV('Copy of 413 - Trial Session.csv')
@@ -477,6 +513,30 @@ async function main() {
   if (pkgMemberCount === packages.length) pass('Member count matches')
   else warn(`Member count mismatch: got ${pkgMemberCount}, expected ${packages.length}`)
 
+  // REGRESSION: packages import must NOT create Payment rows (Revenue CSV owns money)
+  const paysAfterPkg = await api('GET', '/api/finances/payments')
+  const paysAfterPkgCount = paysAfterPkg.json?.length ?? 0
+  const pkgAmountTotal = packages.reduce((s, p) => s + p.amountPaid, 0)
+  if (paysAfterPkgCount === 0) {
+    pass(`No payments created by packages import (sheet total $${pkgAmountTotal.toLocaleString()} correctly ignored)`)
+  } else {
+    fail(`REGRESSION: packages import created ${paysAfterPkgCount} payments — revenue will be double-counted`)
+  }
+
+  // REGRESSION: sessionsUsed from the sheet must survive into the DB
+  const pkgMembers = membersAfterPkg.json ?? []
+  const byName = new Map(pkgMembers.map(m => [`${m.firstName} ${m.lastName}`.trim().toLowerCase(), m]))
+  let usedOk = 0
+  const usedBad = []
+  for (const p of packages) {
+    const m = byName.get(`${p.firstName} ${p.lastName}`.trim().toLowerCase())
+    if (!m) continue
+    if (m.sessionsUsed === p.sessionsUsed && m.sessionsTotal === p.sessionsTotal) usedOk++
+    else usedBad.push(`${p.studentName}: sheet ${p.sessionsUsed}/${p.sessionsTotal}, DB ${m.sessionsUsed}/${m.sessionsTotal}`)
+  }
+  if (usedBad.length === 0) pass(`sessionsUsed/sessionsTotal match the sheet for all ${usedOk} students`)
+  else usedBad.forEach(b => fail(`Session mismatch — ${b}`))
+
   // ── 4. Import Attendance ──────────────────────────────────────
   section('4 · Import Check-in.csv (Attendance)')
   const attendanceRows = []
@@ -496,8 +556,14 @@ async function main() {
     attendance: attendanceRows,
   })
   if (attRes.ok) {
-    const { membersCreated, membersUpdated, membersSkipped, attendanceCreated, attendanceSkipped } = attRes.json
+    const { membersCreated, membersUpdated, membersSkipped, attendanceCreated, attendanceSkipped, aliasResolved } = attRes.json
     pass(`Members: ${membersCreated} created, ${membersUpdated} updated, ${membersSkipped} skipped`)
+    ;(aliasResolved ?? []).forEach(a => info(`Alias resolved: ${a}`))
+    // "Aaron" attends but has no row in Student & Packages — a legitimately new
+    // member, not a duplicate. Anything beyond that is a name-matching failure.
+    const EXPECTED_NEW = 1
+    if (membersCreated <= EXPECTED_NEW) pass(`Check-in created ${membersCreated} member (Aaron — genuinely absent from the packages sheet), no duplicates`)
+    else fail(`REGRESSION: Check-in sheet created ${membersCreated} members, expected at most ${EXPECTED_NEW}`)
     pass(`Attendance: ${attendanceCreated} records created, ${attendanceSkipped} skipped (dupes)`)
     if (attendanceSkipped > 0) warn(`${attendanceSkipped} attendance records were duplicates`)
   } else {
@@ -530,6 +596,21 @@ async function main() {
     const allMembers = membersAfterRev.json ?? []
     const stubs = allMembers.filter(m => !m.packageType && !m.guardianName)
     stubs.forEach(m => info(`  Stub: "${m.firstName} ${m.lastName}"`))
+  }
+
+  // REGRESSION: total payments must equal exactly the revenue rows, nothing more
+  const paysAfterRev = await api('GET', '/api/finances/payments')
+  const paysAfterRevList = paysAfterRev.json ?? []
+  const revTotal = revenue.reduce((s, r) => s + r.amount, 0)
+  const dbTotal = paysAfterRevList.reduce((s, p) => s + Number(p.amount), 0)
+  info(`Revenue CSV total: $${revTotal.toLocaleString()} · DB payments total: $${dbTotal.toLocaleString()}`)
+  const strays = paysAfterRevList.filter(p => (p.notes ?? '').startsWith('Imported from packages sheet'))
+  if (strays.length === 0) pass('Zero package-sheet payments in DB')
+  else fail(`REGRESSION: ${strays.length} package-sheet payments found`)
+  if (Math.abs(dbTotal - revTotal) < 0.5) {
+    pass('Finances total matches the Revenue CSV exactly — no double-counting')
+  } else {
+    warn(`Finances off by $${(dbTotal - revTotal).toLocaleString()} vs Revenue CSV (unknown-student rows are skipped by design)`)
   }
 
   // ── 6. Import Expenses ────────────────────────────────────────
@@ -570,6 +651,77 @@ async function main() {
   if (trialListCount === trials.length) pass(`Trial student count verified: ${trialListCount}`)
   else warn(`Trial count mismatch: DB has ${trialListCount}, parsed ${trials.length}`)
 
+  // ── 7b. Import Monthly Profit Tracker ─────────────────────────
+  section('7b · Import Monthly Profit Tracker.csv')
+  const profRes = await api('POST', '/api/monthly-profit/import', { rows: profits })
+  if (profRes.ok) pass(`${profRes.json.created} created, ${profRes.json.updated} updated`)
+  else fail(`Profit import failed: ${JSON.stringify(profRes.json)}`)
+  // Upsert idempotency: re-running must update, never duplicate
+  const profRes2 = await api('POST', '/api/monthly-profit/import', { rows: profits })
+  if (profRes2.ok && profRes2.json.created === 0 && profRes2.json.updated === profits.length) {
+    pass(`Re-import is idempotent: 0 created, ${profRes2.json.updated} updated`)
+  } else {
+    fail(`Profit re-import not idempotent: ${JSON.stringify(profRes2.json)}`)
+  }
+
+  // ── 7c. Sessions remaining, as the member page computes it ────
+  section('7c · Sessions Remaining (post-attendance)')
+  const membersFinal = (await api('GET', '/api/members')).json ?? []
+  // Logged-attendance counts come from the Check-in CSV we just imported,
+  // keyed by name (there is no global attendance list endpoint).
+  const attByName = new Map()
+  for (const m of members) {
+    attByName.set(m.name.trim().toLowerCase(), m.attendanceDates.length)
+  }
+  const attByMember = new Map()
+  for (const m of membersFinal) {
+    const k = `${m.firstName} ${m.lastName}`.trim().toLowerCase()
+    attByMember.set(m.id, attByName.get(k) ?? 0)
+  }
+  let shown = 0
+  let zeroRemaining = 0
+  for (const m of membersFinal) {
+    const logged = attByMember.get(m.id) ?? 0
+    const used = Math.max(logged, m.sessionsUsed)      // same formula the UI uses
+    const remaining = Math.max(0, m.sessionsTotal - used)
+    if (remaining === 0) zeroRemaining++
+    if (m.sessionsTotal > 0 && shown < 12) {
+      info(`${m.firstName} ${m.lastName}: ${remaining}/${m.sessionsTotal} left (used ${used} = ${logged} logged, ${m.sessionsUsed} carried)`)
+      shown++
+    }
+  }
+  // Cross-check against the sheet's own "Sessions Left" column
+  const leftBad = []
+  for (const p of packages) {
+    const m = membersFinal.find(x => `${x.firstName} ${x.lastName}`.trim().toLowerCase() === `${p.firstName} ${p.lastName}`.trim().toLowerCase())
+    if (!m) continue
+    const logged = attByMember.get(m.id) ?? 0
+    const remaining = Math.max(0, m.sessionsTotal - Math.max(logged, m.sessionsUsed))
+    if (remaining > p.sessionsLeft) {
+      leftBad.push(`${p.studentName}: app shows ${remaining} left, sheet says ${p.sessionsLeft}`)
+    }
+  }
+  if (leftBad.length === 0) pass('No student shows more sessions remaining than the sheet allows')
+  else leftBad.forEach(b => fail(b))
+  info(`${zeroRemaining} students are fully used up (renewal needed)`)
+
+  // `--clean` stops here: reset + one import pass, leaving the DB in the exact
+  // state the spreadsheets describe. The race round below deliberately creates
+  // duplicates, so it must be skipped when the goal is usable data.
+  if (process.argv.includes('--clean')) {
+    section('✅  Clean Import Complete — DB matches the spreadsheets')
+    const [cm, ce, ct] = await Promise.all([
+      api('GET', '/api/members'), api('GET', '/api/expenses'), api('GET', '/api/trials'),
+    ])
+    const cp = await api('GET', '/api/finances/payments')
+    console.log(`  Members:         ${cm.json?.length ?? '?'}`)
+    console.log(`  Payments:        ${cp.json?.length ?? '?'} ($${(cp.json ?? []).reduce((s, p) => s + Number(p.amount), 0).toLocaleString()})`)
+    console.log(`  Expenses:        ${ce.json?.length ?? '?'}`)
+    console.log(`  Trial Students:  ${ct.json?.length ?? '?'}`)
+    console.log('')
+    return
+  }
+
   // ── 8. Race condition test: concurrent re-import ──────────────
   section('8 · Race Condition Test: Concurrent Duplicate Imports')
   info('Firing packages + revenue + expenses + trials simultaneously...')
@@ -594,9 +746,13 @@ async function main() {
 
   // Check for duplicate payments
   const finalPayments = await api('GET', '/api/finances/payments')
-  const payCount = finalPayments.json?.length ?? 0
+  const finalPayList = finalPayments.json ?? []
+  const payCount = finalPayList.length
   info(`Total payments in DB: ${payCount}`)
   if (r2.ok && r2.json.paymentsCreated > 0) warn(`Revenue was re-imported: ${r2.json.paymentsCreated} duplicate payments created — the UI should warn users before re-importing`)
+  const straysAfterRace = finalPayList.filter(p => (p.notes ?? '').startsWith('Imported from packages sheet'))
+  if (straysAfterRace.length === 0) pass('Concurrent packages re-import still created zero payments')
+  else fail(`REGRESSION: ${straysAfterRace.length} package-sheet payments after concurrent re-import`)
 
   // ── 9. Final DB state summary ─────────────────────────────────
   section('9 · Final Database State Summary')

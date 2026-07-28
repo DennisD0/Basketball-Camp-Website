@@ -198,15 +198,20 @@ function parsePackagesCSV(text: string): ParsedPackage[] {
     if (!studentName) continue
     const amountRaw = cells[7]?.replace(/[$,]/g, '').trim()
     const amount = parseFloat(amountRaw ?? '0') || 0
-    // Handle quoted names like 'Soichiro "Z" Abe' and strip parentheticals like "(short)"
-    const clean = studentName.replace(/["]/g, '').replace(/\s*\([^)]*\)\s*/g, ' ').trim()
-    const cleanParts = clean.split(/\s+/)
+    // Handle quoted names like 'Soichiro "Z" Abe'. The parenthetical is KEPT —
+    // "Ian Kim (short)" and "Ian Kim (tall)" are two different students, and
+    // dropping it silently merged their session counts.
+    const noQuotes = studentName.replace(/["]/g, '').trim()
+    const paren = noQuotes.match(/\(([^)]*)\)/)?.[1]?.trim()
+    const bare = noQuotes.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim()
+    const clean = paren ? `${bare} (${paren})` : bare
+    const cleanParts = bare.split(/\s+/)
     const parts = cleanParts
     const classes = [cells[8], cells[9]].filter(c => c?.trim()).join(', ')
     results.push({
       studentName: clean,
       firstName: cleanParts[0],
-      lastName: cleanParts.slice(1).join(' '),
+      lastName: [cleanParts.slice(1).join(' '), paren && `(${paren})`].filter(Boolean).join(' '),
       guardianName: cells[1]?.trim() ?? '',
       guardianPhone: cells[2]?.trim() ?? '',
       packageType: cells[3]?.trim() ?? '',
@@ -234,9 +239,15 @@ interface ParseResult {
   errors: string[]
 }
 
+// Strips scheduling noise like "(2 pm)" but KEEPS size qualifiers, which are
+// the only thing telling two same-named students apart.
+const KEEP_QUALIFIER = /^(short|small|tall|big|long)$/i
+
 function cleanName(raw: string): string {
   return raw
-    .replace(/\s*\(.*?\)\s*/g, '') // strip "(2 pm)" etc.
+    .replace(/\s*\((.*?)\)\s*/g, (_, inner: string) =>
+      KEEP_QUALIFIER.test(inner.trim()) ? ` (${inner.trim()}) ` : ' ')
+    .replace(/\s+/g, ' ')
     .trim()
 }
 
@@ -1079,6 +1090,7 @@ function PackagesImportSection() {
       <div className="mb-4">
         <p className="text-sm font-semibold text-gray-700">Student & Packages CSV → Members</p>
         <p className="text-xs text-gray-400 mt-0.5">Creates or updates members with package type, session counts, guardian info, and class assignments. Existing members are matched by name.</p>
+        <p className="text-xs text-gray-400 mt-1">Amount Paid is shown below for reference only — it is <strong>not</strong> added to finances. The Revenue CSV is the sole source of truth for money.</p>
       </div>
       <DropZone onFile={handleFile} label={fileName ? `${fileName} — ${rows.length} students` : 'Upload 413 – Student&Packages .csv'} />
 
@@ -1087,7 +1099,7 @@ function PackagesImportSection() {
           <div className="grid grid-cols-3 gap-3 mb-4">
             <StatTile label="Students" value={String(rows.length)} />
             <StatTile label="Packages" value={String(new Set(rows.map(r => r.packageType)).size)} />
-            <StatTile label="Total paid" value={`$${rows.reduce((s,r)=>s+r.amountPaid,0).toLocaleString()}`} color="teal" />
+            <StatTile label="Total paid (ref only)" value={`$${rows.reduce((s,r)=>s+r.amountPaid,0).toLocaleString()}`} />
           </div>
           <div className="space-y-1.5 max-h-56 overflow-y-auto">
             {rows.map((r, i) => (

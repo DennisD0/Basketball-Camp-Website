@@ -41,7 +41,11 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
     : null
 
   const totalPaid = payments.reduce((s, p) => s + Number(p.amount), 0)
-  const sessionsUsed = allAttendance.length
+  // Sessions used = whichever is higher: logged attendance, or the count
+  // carried over from the Student & Packages sheet (sessions burned before
+  // check-in tracking started).
+  const attendedCount = allAttendance.length
+  const sessionsUsed = Math.max(attendedCount, member.sessionsUsed)
   const sessionsRemaining = Math.max(0, member.sessionsTotal - sessionsUsed)
   const sessionsPct = Math.min(Math.round((sessionsUsed / Math.max(member.sessionsTotal, 1)) * 100), 100)
 
@@ -134,7 +138,10 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
           <div className="w-full bg-white/60 rounded-full h-2 mb-2">
             <div className={`h-2 rounded-full transition-all ${sessionStatus.bar}`} style={{ width: `${sessionsPct}%` }} />
           </div>
-          <p className="text-xs text-gray-500">{sessionsUsed} sessions attended total</p>
+          <p className="text-xs text-gray-500">
+            {sessionsUsed} sessions used
+            {sessionsUsed > attendedCount && ` · ${attendedCount} logged here, ${sessionsUsed - attendedCount} carried over`}
+          </p>
           {sessionStatus.msg && (
             <p className={`text-xs font-semibold mt-2 ${sessionStatus.msgColor}`}>{sessionStatus.msg}</p>
           )}
