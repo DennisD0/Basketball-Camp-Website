@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
 import { resolveMember } from '@/lib/name-match'
+import { withImportKeys } from '@/lib/import-key'
 
 interface RevenueRow {
   studentName: string
@@ -36,7 +37,22 @@ export async function POST(req: NextRequest) {
     let membersCreated = 0
     const errors: string[] = []
 
-    for (const row of rows) {
+    // Re-uploading the same sheet must not double revenue — each row carries a
+    // content-derived key on a unique column, so repeats are skipped.
+    const keyed = withImportKeys('rev', rows, r => [r.studentName, r.date, r.amount, r.paymentMethod])
+    const alreadyImported = new Set(
+      (await prisma.payment.findMany({
+        where: { importKey: { in: keyed.map(r => r.importKey) } },
+        select: { importKey: true },
+      })).map(p => p.importKey),
+    )
+    let paymentsSkipped = 0
+
+    for (const row of keyed) {
+      if (alreadyImported.has(row.importKey)) {
+        paymentsSkipped++
+        continue
+      }
       if (!row.studentName || row.studentName.toLowerCase() === 'unknown') {
         errors.push(`Skipped "${row.studentName}" — no name`)
         continue
@@ -67,6 +83,7 @@ export async function POST(req: NextRequest) {
             amount: row.amount,
             method: mapMethod(row.paymentMethod),
             date: new Date(row.date),
+            importKey: row.importKey,
             notes: [
               row.packageType && `Package: ${row.packageType}`,
               row.paymentMethod && `via ${row.paymentMethod}`,
@@ -76,11 +93,14 @@ export async function POST(req: NextRequest) {
         })
         paymentsCreated++
       } catch (err) {
-        errors.push(`${row.studentName}: ${String(err)}`)
+        // A concurrent import can win the race to the unique key — that is the
+        // constraint doing its job, not a failure.
+        if (String(err).includes('Unique constraint')) paymentsSkipped++
+        else errors.push(`${row.studentName}: ${String(err)}`)
       }
     }
 
-    return NextResponse.json({ paymentsCreated, membersCreated, errors })
+    return NextResponse.json({ paymentsCreated, paymentsSkipped, membersCreated, errors })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

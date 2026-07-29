@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
+import { withImportKeys } from '@/lib/import-key'
 
 async function auth() {
   const c = await cookies()
@@ -24,12 +25,14 @@ export async function POST(req: NextRequest) {
   // Bulk import: { rows: [...] }
   if (Array.isArray(body.rows)) {
     try {
+      const keyed = withImportKeys<{
+        name: string; classTime?: string; guardianName?: string; guardianPhone?: string;
+        email?: string; age?: number; packageInterest?: string; classPref?: string; notes?: string;
+      }>('trial', body.rows, r => [r.name, r.classTime, r.guardianPhone])
       const created = await prisma.trialStudent.createMany({
-        data: body.rows.map((r: {
-          name: string; classTime?: string; guardianName?: string; guardianPhone?: string;
-          email?: string; age?: number; packageInterest?: string; classPref?: string; notes?: string;
-        }) => ({
+        data: keyed.map(r => ({
           name: r.name,
+          importKey: r.importKey,
           classTime: r.classTime || null,
           guardianName: r.guardianName || null,
           guardianPhone: r.guardianPhone || null,
@@ -39,9 +42,9 @@ export async function POST(req: NextRequest) {
           classPref: r.classPref || null,
           notes: r.notes || null,
         })),
-        skipDuplicates: false,
+        skipDuplicates: true,
       })
-      return NextResponse.json({ created: created.count })
+      return NextResponse.json({ created: created.count, skipped: keyed.length - created.count })
     } catch (err) {
       return NextResponse.json({ error: String(err) }, { status: 500 })
     }

@@ -735,21 +735,31 @@ async function main() {
   const elapsed = Date.now() - t0
   info(`All 4 concurrent imports completed in ${elapsed}ms`)
 
+  // Re-importing the same CSVs must be a NO-OP. The client's workflow is
+  // "clear, then re-upload", but if they forget to clear, nothing may double.
   if (r1.ok) pass(`Packages (2nd): ${r1.json.updated ?? 0} updated, ${r1.json.created ?? 0} created, ${r1.json.errors?.length ?? 0} errors`)
   else fail(`Packages (2nd) failed: ${JSON.stringify(r1.json)}`)
-  if (r2.ok) pass(`Revenue (2nd): ${r2.json.paymentsCreated} payments, ${r2.json.membersCreated} new stubs`)
-  else fail(`Revenue (2nd) failed: ${JSON.stringify(r2.json)}`)
-  if (r3.ok) pass(`Expenses (2nd): ${r3.json.created} created (duplicates — expected)`)
-  else fail(`Expenses (2nd) failed: ${JSON.stringify(r3.json)}`)
-  if (r4.ok) pass(`Trials (2nd): ${r4.json.created} created (duplicates — expected)`)
-  else fail(`Trials (2nd) failed: ${JSON.stringify(r4.json)}`)
+
+  if (!r2.ok) fail(`Revenue (2nd) failed: ${JSON.stringify(r2.json)}`)
+  else if (r2.json.paymentsCreated === 0) pass(`Revenue re-import idempotent: 0 new, ${r2.json.paymentsSkipped} skipped`)
+  else fail(`REGRESSION: Revenue re-import created ${r2.json.paymentsCreated} duplicate payments`)
+
+  if (!r3.ok) fail(`Expenses (2nd) failed: ${JSON.stringify(r3.json)}`)
+  else if (r3.json.created === 0) pass(`Expenses re-import idempotent: 0 new, ${r3.json.skipped} skipped`)
+  else fail(`REGRESSION: Expenses re-import created ${r3.json.created} duplicates`)
+
+  if (!r4.ok) fail(`Trials (2nd) failed: ${JSON.stringify(r4.json)}`)
+  else if (r4.json.created === 0) pass(`Trials re-import idempotent: 0 new, ${r4.json.skipped} skipped`)
+  else fail(`REGRESSION: Trials re-import created ${r4.json.created} duplicates`)
 
   // Check for duplicate payments
   const finalPayments = await api('GET', '/api/finances/payments')
   const finalPayList = finalPayments.json ?? []
   const payCount = finalPayList.length
-  info(`Total payments in DB: ${payCount}`)
-  if (r2.ok && r2.json.paymentsCreated > 0) warn(`Revenue was re-imported: ${r2.json.paymentsCreated} duplicate payments created — the UI should warn users before re-importing`)
+  const raceTotal = finalPayList.reduce((s, p) => s + Number(p.amount), 0)
+  info(`Total payments in DB: ${payCount} ($${raceTotal.toLocaleString()})`)
+  if (payCount === revenue.length - 1) pass('Payment count unchanged after the duplicate import round')
+  else fail(`Payment count drifted to ${payCount} after re-import`)
   const straysAfterRace = finalPayList.filter(p => (p.notes ?? '').startsWith('Imported from packages sheet'))
   if (straysAfterRace.length === 0) pass('Concurrent packages re-import still created zero payments')
   else fail(`REGRESSION: ${straysAfterRace.length} package-sheet payments after concurrent re-import`)

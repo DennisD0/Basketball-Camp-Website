@@ -21,6 +21,9 @@ export async function DELETE() {
       prisma.session.deleteMany(),
       prisma.expense.deleteMany(),
       prisma.trialStudent.deleteMany(),
+      // Cleared too, so a full re-upload starts from an empty slate rather than
+      // leaving stale summary rows behind.
+      prisma.monthlyProfit.deleteMany(),
     ])
     return NextResponse.json({ ok: true })
   } catch (err) {

@@ -881,7 +881,7 @@ function RevenueImportSection() {
   const [rows, setRows] = useState<ParsedRevenue[]>([])
   const [fileName, setFileName] = useState('')
   const [status, setStatus] = useState<'idle'|'importing'|'done'|'error'>('idle')
-  const [result, setResult] = useState<{ paymentsCreated: number; membersCreated: number; errors: string[] } | null>(null)
+  const [result, setResult] = useState<{ paymentsCreated: number; paymentsSkipped: number; membersCreated: number; errors: string[] } | null>(null)
   const [err, setErr] = useState('')
 
   const handleFile = useCallback((file: File) => {
@@ -943,6 +943,7 @@ function RevenueImportSection() {
       {status === 'done' && result && (
         <div className="bg-green-50 rounded-xl p-4 text-sm text-green-700 mb-4 space-y-1">
           <p>✓ <strong>{result.paymentsCreated}</strong> payments imported</p>
+          {result.paymentsSkipped > 0 && <p className="text-gray-500">↩ <strong>{result.paymentsSkipped}</strong> already imported earlier — skipped, not double-counted</p>}
           {result.membersCreated > 0 && <p>✓ <strong>{result.membersCreated}</strong> new members created</p>}
           {result.errors.length > 0 && <p className="text-amber-600 text-xs">{result.errors.length} skipped — check console</p>}
         </div>
@@ -967,7 +968,7 @@ function ExpensesImportSection() {
   const [rows, setRows] = useState<ParsedExpense[]>([])
   const [fileName, setFileName] = useState('')
   const [status, setStatus] = useState<'idle'|'importing'|'done'|'error'>('idle')
-  const [result, setResult] = useState<{ created: number } | null>(null)
+  const [result, setResult] = useState<{ created: number; skipped: number } | null>(null)
   const [err, setErr] = useState('')
 
   const handleFile = useCallback((file: File) => {
@@ -1026,8 +1027,9 @@ function ExpensesImportSection() {
       )}
 
       {status === 'done' && result && (
-        <div className="bg-green-50 rounded-xl p-4 text-sm text-green-700 mb-4">
-          ✓ <strong>{result.created}</strong> expenses imported
+        <div className="bg-green-50 rounded-xl p-4 text-sm text-green-700 mb-4 space-y-1">
+          <p>✓ <strong>{result.created}</strong> expenses imported</p>
+          {result.skipped > 0 && <p className="text-gray-500">↩ <strong>{result.skipped}</strong> already imported earlier — skipped, not double-counted</p>}
         </div>
       )}
       {status === 'error' && <div className="bg-red-50 rounded-xl p-4 text-sm text-red-600 mb-4">{err}</div>}
@@ -1145,7 +1147,7 @@ function TrialsImportSection() {
   const [rows, setRows] = useState<ParsedTrial[]>([])
   const [fileName, setFileName] = useState('')
   const [status, setStatus] = useState<'idle'|'importing'|'done'|'error'>('idle')
-  const [result, setResult] = useState<{ created: number } | null>(null)
+  const [result, setResult] = useState<{ created: number; skipped: number } | null>(null)
   const [err, setErr] = useState('')
 
   const handleFile = useCallback((file: File) => {
@@ -1202,7 +1204,8 @@ function TrialsImportSection() {
 
       {status === 'done' && result && (
         <div className="bg-green-50 rounded-xl p-4 text-sm text-green-700 mb-4">
-          ✓ <strong>{result.created}</strong> trial students imported —{' '}
+          ✓ <strong>{result.created}</strong> trial students imported
+          {result.skipped > 0 && <> · <span className="text-gray-500">{result.skipped} already imported, skipped</span></>} —{' '}
           <a href="/trials" className="underline font-semibold">View Trials →</a>
         </div>
       )}
