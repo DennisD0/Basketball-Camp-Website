@@ -45,7 +45,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
   // carried over from the Student & Packages sheet (sessions burned before
   // check-in tracking started).
   const attendedCount = allAttendance.length
-  const sessionsUsed = Math.max(attendedCount, member.sessionsUsed)
+  const sessionsUsed = member.sessionsUsed
   const sessionsRemaining = Math.max(0, member.sessionsTotal - sessionsUsed)
   const sessionsPct = Math.min(Math.round((sessionsUsed / Math.max(member.sessionsTotal, 1)) * 100), 100)
 
@@ -139,8 +139,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
             <div className={`h-2 rounded-full transition-all ${sessionStatus.bar}`} style={{ width: `${sessionsPct}%` }} />
           </div>
           <p className="text-xs text-gray-500">
-            {sessionsUsed} sessions used
-            {sessionsUsed > attendedCount && ` · ${attendedCount} logged here, ${sessionsUsed - attendedCount} carried over`}
+            {sessionsUsed} sessions used · {attendedCount} logged in app
           </p>
           {sessionStatus.msg && (
             <p className={`text-xs font-semibold mt-2 ${sessionStatus.msgColor}`}>{sessionStatus.msg}</p>
@@ -264,7 +263,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
                   <div>
                     <p className="text-sm font-semibold text-gray-800">${Number(p.amount).toFixed(2)}</p>
                     <p className="text-xs text-gray-400">
-                      {new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {new Date(new Date(p.date).toISOString().slice(0,10) + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       {p.notes ? ` · ${p.notes}` : ''}
                     </p>
                   </div>

@@ -23,6 +23,11 @@ type Props = {
 
 const PERIOD_WEEKS: Record<string, number> = { '4W': 4, '8W': 8, '3M': 12, '6M': 26, '1Y': 52 }
 
+// Dates are stored as UTC midnight. Parsing them with `new Date(str)` in a
+// negative-offset timezone (e.g. EDT = UTC-4) yields the previous calendar day.
+// Force noon UTC so any timezone renders the correct calendar date.
+function asLocalDate(s: string) { return new Date(s.slice(0, 10) + 'T12:00:00Z') }
+
 const REVENUE_PERIODS = [
   { key: 'week', label: 'Week' },
   { key: 'month', label: 'Month' },
@@ -36,7 +41,7 @@ function sumRevenueForPeriod(payments: Payment[], period: RevenuePeriod) {
   if (period === 'week') cutoff.setDate(now.getDate() - 7)
   else if (period === 'month') cutoff.setMonth(now.getMonth() - 1)
   else cutoff.setMonth(now.getMonth() - 3)
-  return payments.filter(p => new Date(p.date) >= cutoff).reduce((s, p) => s + p.amount, 0)
+  return payments.filter(p => asLocalDate(p.date) >= cutoff).reduce((s, p) => s + p.amount, 0)
 }
 const METHOD_COLORS = ['#2C6E6A', '#2D3875']
 const CAT_COLORS: Record<string, string> = {
@@ -64,13 +69,13 @@ function buildWeeklyProfitData(payments: Payment[], expenses: Expense[], weeksBa
   const expByWeek: Record<string, number> = {}
   const weeks = new Set<string>()
 
-  payments.filter(p => new Date(p.date) >= cutoff).forEach(p => {
-    const label = weekLabel(new Date(p.date))
+  payments.filter(p => asLocalDate(p.date) >= cutoff).forEach(p => {
+    const label = weekLabel(asLocalDate(p.date))
     revByWeek[label] = (revByWeek[label] ?? 0) + p.amount
     weeks.add(label)
   })
-  expenses.filter(e => new Date(e.date) >= cutoff).forEach(e => {
-    const label = weekLabel(new Date(e.date))
+  expenses.filter(e => asLocalDate(e.date) >= cutoff).forEach(e => {
+    const label = weekLabel(asLocalDate(e.date))
     expByWeek[label] = (expByWeek[label] ?? 0) + e.amount
     weeks.add(label)
   })
@@ -88,7 +93,7 @@ function buildWeeklyProfitData(payments: Payment[], expenses: Expense[], weeksBa
 function buildSparkline(payments: Payment[]) {
   const months: Record<string, number> = {}
   payments.forEach(p => {
-    const key = new Date(p.date).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+    const key = asLocalDate(p.date).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
     months[key] = (months[key] ?? 0) + p.amount
   })
   return Object.entries(months).slice(-8).map(([label, amount]) => ({ label, amount }))
@@ -389,7 +394,7 @@ export default function FinanceDashboard({
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.method === 'CASH' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}>
                             {p.method === 'CASH' ? 'Cash' : 'Transfer'}
                           </span>
-                          <span className="text-[10px] text-gray-400">{new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</span>
+                          <span className="text-[10px] text-gray-400">{asLocalDate(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</span>
                         </div>
                         {p.notes && <p className="text-[11px] text-gray-400 mt-1 truncate">{p.notes}</p>}
                       </div>
@@ -423,7 +428,7 @@ export default function FinanceDashboard({
                               {p.method === 'CASH' ? 'Cash' : 'Bank Transfer'}
                             </span>
                           </td>
-                          <td className="px-5 py-3.5 text-gray-500 text-xs">{new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                          <td className="px-5 py-3.5 text-gray-500 text-xs">{asLocalDate(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                           <td className="px-5 py-3.5 text-gray-400 text-xs max-w-[160px] truncate">{p.notes ?? '—'}</td>
                           <td className="px-5 py-3.5 text-right"><DeletePaymentButton id={p.id} /></td>
                         </tr>
@@ -545,7 +550,7 @@ export default function FinanceDashboard({
                         <p className="font-semibold text-sm text-gray-900 truncate">{e.description}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 uppercase tracking-wide">{e.category}</span>
-                          <span className="text-[10px] text-gray-400">{new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</span>
+                          <span className="text-[10px] text-gray-400">{asLocalDate(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
@@ -578,7 +583,7 @@ export default function FinanceDashboard({
                             </span>
                           </td>
                           <td className="px-5 py-3.5 font-bold text-brand-orange">${e.amount.toFixed(2)}</td>
-                          <td className="px-5 py-3.5 text-gray-500 text-xs">{new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                          <td className="px-5 py-3.5 text-gray-500 text-xs">{asLocalDate(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                           <td className="px-5 py-3.5 text-right">
                             <button onClick={() => handleDeleteExpense(e.id)} className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors">Delete</button>
                           </td>

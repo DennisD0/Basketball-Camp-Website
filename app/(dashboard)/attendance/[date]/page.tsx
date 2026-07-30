@@ -130,8 +130,7 @@ export default async function AttendanceDatePage({
           ) : (
             <div className="space-y-2">
               {attendees.map(({ member, sessionsAttended }, idx) => {
-                // Honor the carried-over count from the packages sheet
-                const used = Math.max(sessionsAttended, member.sessionsUsed)
+                const used = member.sessionsUsed
                 const remaining = Math.max(0, member.sessionsTotal - used)
                 const pct = Math.min(Math.round((used / Math.max(member.sessionsTotal, 1)) * 100), 100)
                 const colors = sessionColor(remaining)

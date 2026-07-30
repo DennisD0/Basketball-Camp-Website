@@ -10,7 +10,7 @@ type Payment = { amount: number; method: string; date: string; memberId?: string
 function buildMonthlyData(payments: Payment[]) {
   const months: Record<string, number> = {}
   payments.forEach(p => {
-    const d = new Date(p.date)
+    const d = new Date(p.date.slice(0, 10) + 'T12:00:00Z')
     const key = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
     months[key] = (months[key] ?? 0) + p.amount
   })
