@@ -164,5 +164,36 @@ async function runImport(request: NextRequest) {
 
   const attendanceSkipped = attendanceData.length - attendanceCreated
 
+  // Keep sessionsUsed in sync: after adding attendance records, set each
+  // affected member's sessionsUsed to MAX(current_db_value, actual_count).
+  // This fixes the display even when imports run in any order or after a reset.
+  const affectedIds = [...new Set(
+    (attendanceData as Array<{ memberId: string }>).map(a => a.memberId)
+  )]
+  if (affectedIds.length > 0) {
+    const [counts, members] = await Promise.all([
+      prisma.attendance.groupBy({
+        by: ['memberId'],
+        where: { memberId: { in: affectedIds }, status: 'PRESENT' },
+        _count: { memberId: true },
+      }),
+      prisma.member.findMany({
+        where: { id: { in: affectedIds } },
+        select: { id: true, sessionsUsed: true },
+      }),
+    ])
+    const currentMap = Object.fromEntries(members.map(m => [m.id, m.sessionsUsed]))
+    await Promise.all(
+      counts
+        .map(({ memberId, _count }) => {
+          const newVal = Math.max(currentMap[memberId] ?? 0, _count.memberId)
+          return newVal > (currentMap[memberId] ?? 0)
+            ? prisma.member.update({ where: { id: memberId }, data: { sessionsUsed: newVal } })
+            : null
+        })
+        .filter((p): p is NonNullable<typeof p> => p !== null)
+    )
+  }
+
   return NextResponse.json({ membersCreated, membersUpdated, membersSkipped, attendanceCreated, attendanceSkipped, aliasResolved })
 }

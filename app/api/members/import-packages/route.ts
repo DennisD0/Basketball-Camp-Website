@@ -37,10 +37,20 @@ export async function POST(req: NextRequest) {
     let updated = 0
     const errors: string[] = []
 
+    const touchedIds: string[] = []
+
     for (const row of rows) {
       if (!row.firstName) continue
-      // strict: this sheet is the roster — never merge two of its own rows
-      const existing = resolveMember(`${row.firstName} ${row.lastName ?? ''}`, pool, { strict: true })
+      // Strict: never merge two rows from this sheet with each other.
+      // Fallback: if Check-in was imported first it may have created a stub
+      // member with only a first name — detect that and update it instead of
+      // creating a duplicate.
+      let existing = resolveMember(`${row.firstName} ${row.lastName ?? ''}`, pool, { strict: true })
+      if (!existing && row.lastName?.trim()) {
+        const fn = row.firstName.trim().toLowerCase()
+        const stubs = pool.filter(m => m.lastName === '' && m.firstName.toLowerCase() === fn)
+        if (stubs.length === 1) existing = stubs[0]
+      }
 
       const data = {
         guardianName: row.guardianName || undefined,
@@ -56,7 +66,19 @@ export async function POST(req: NextRequest) {
         // The Revenue CSV is the single source of truth for money; creating
         // payments from this sheet double-counted every package into finances.
         if (existing) {
-          await prisma.member.update({ where: { id: existing.id }, data })
+          const isStub = !existing.lastName.trim()
+          const updateData = isStub
+            ? { firstName: row.firstName.trim(), lastName: (row.lastName ?? '').trim(), ...data }
+            : data
+          await prisma.member.update({ where: { id: existing.id }, data: updateData })
+          if (isStub) {
+            const idx = pool.findIndex(m => m.id === existing!.id)
+            if (idx >= 0) {
+              pool[idx].firstName = row.firstName.trim()
+              pool[idx].lastName = (row.lastName ?? '').trim()
+            }
+          }
+          touchedIds.push(existing.id)
           updated++
         } else {
           const m = await prisma.member.create({
@@ -68,11 +90,39 @@ export async function POST(req: NextRequest) {
             },
           })
           pool.push({ id: m.id, firstName: m.firstName, lastName: m.lastName })
+          touchedIds.push(m.id)
           created++
         }
       } catch (err) {
         errors.push(`${row.firstName} ${row.lastName}: ${String(err)}`)
       }
+    }
+
+    // After writing S&P sessionsUsed values, sync upward with actual attendance
+    // so re-importing S&P never overwrites a higher count from the Check-in sheet.
+    if (touchedIds.length > 0) {
+      const [counts, members] = await Promise.all([
+        prisma.attendance.groupBy({
+          by: ['memberId'],
+          where: { memberId: { in: touchedIds }, status: 'PRESENT' },
+          _count: { memberId: true },
+        }),
+        prisma.member.findMany({
+          where: { id: { in: touchedIds } },
+          select: { id: true, sessionsUsed: true },
+        }),
+      ])
+      const currentMap = Object.fromEntries(members.map(m => [m.id, m.sessionsUsed]))
+      await Promise.all(
+        counts
+          .map(({ memberId, _count }) => {
+            const newVal = Math.max(currentMap[memberId] ?? 0, _count.memberId)
+            return newVal > (currentMap[memberId] ?? 0)
+              ? prisma.member.update({ where: { id: memberId }, data: { sessionsUsed: newVal } })
+              : null
+          })
+          .filter((p): p is NonNullable<typeof p> => p !== null)
+      )
     }
 
     return NextResponse.json({ created, updated, errors })

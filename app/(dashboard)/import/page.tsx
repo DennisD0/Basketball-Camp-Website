@@ -363,6 +363,21 @@ export default function ImportPage() {
   const [showResetModal, setShowResetModal] = useState(false)
   const [resetStatus, setResetStatus] = useState<'idle' | 'deleting' | 'done' | 'error'>('idle')
 
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle')
+  const [syncResult, setSyncResult] = useState<{ updated: number } | null>(null)
+
+  async function handleSyncSessions() {
+    setSyncStatus('syncing')
+    setSyncResult(null)
+    try {
+      const res = await fetch('/api/members/sync-sessions', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) { setSyncStatus('error'); return }
+      setSyncResult(data)
+      setSyncStatus('done')
+    } catch { setSyncStatus('error') }
+  }
+
   // Delete by period
   const [periodMode, setPeriodMode] = useState<'month' | 'date'>('month')
   const [periodValue, setPeriodValue] = useState('')
@@ -551,6 +566,33 @@ export default function ImportPage() {
       </div>
 
       {activeTab === 'attendance' && <>
+
+      {/* Sync Sessions */}
+      <div className="bg-white rounded-2xl shadow-sm ring-1 ring-black/5 mb-4 overflow-hidden">
+        <div className="px-4 pt-4 pb-3 border-b border-gray-50">
+          <p className="text-sm font-semibold text-gray-800">Sync Sessions Used</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Recalculates each member&apos;s sessions used from actual attendance records. Run this if the card shows the wrong count.
+          </p>
+        </div>
+        <div className="p-4 flex items-center gap-3">
+          <button
+            onClick={handleSyncSessions}
+            disabled={syncStatus === 'syncing'}
+            className="px-4 py-2 text-xs font-semibold rounded-xl bg-brand-navy text-white hover:bg-brand-navy/90 transition-all active:scale-95 disabled:opacity-50"
+          >
+            {syncStatus === 'syncing' ? 'Syncing…' : 'Sync Sessions'}
+          </button>
+          {syncStatus === 'done' && syncResult && (
+            <p className="text-xs text-green-600 font-medium">
+              ✓ {syncResult.updated === 0 ? 'All sessions already up to date' : `Updated ${syncResult.updated} member${syncResult.updated !== 1 ? 's' : ''}`}
+            </p>
+          )}
+          {syncStatus === 'error' && (
+            <p className="text-xs text-red-500">Sync failed — check your connection</p>
+          )}
+        </div>
+      </div>
 
       {/* Delete by Period */}
       <div className="bg-white rounded-2xl shadow-sm ring-1 ring-black/5 mb-4 overflow-hidden">
