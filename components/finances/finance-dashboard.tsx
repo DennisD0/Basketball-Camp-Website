@@ -7,6 +7,7 @@ import {
   LineChart, Line, PieChart, Pie, Cell, BarChart, Bar, Legend,
 } from 'recharts'
 import DeletePaymentButton from './delete-payment-button'
+import { asLocalDate } from '@/lib/dates'
 
 type Payment = {
   id: string; amount: number; method: string; date: string
@@ -22,11 +23,6 @@ type Props = {
 }
 
 const PERIOD_WEEKS: Record<string, number> = { '4W': 4, '8W': 8, '3M': 12, '6M': 26, '1Y': 52 }
-
-// Dates are stored as UTC midnight. Parsing them with `new Date(str)` in a
-// negative-offset timezone (e.g. EDT = UTC-4) yields the previous calendar day.
-// Force noon UTC so any timezone renders the correct calendar date.
-function asLocalDate(s: string) { return new Date(s.slice(0, 10) + 'T12:00:00Z') }
 
 const REVENUE_PERIODS = [
   { key: 'week', label: 'Week' },
@@ -52,13 +48,16 @@ const CAT_COLORS: Record<string, string> = {
   'Miscellaneous': '#6b7280',
 }
 
-// Returns week label "Jun 9" for the Monday of that week
-function weekLabel(date: Date) {
-  const d = new Date(date)
-  const day = d.getDay()
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-  d.setDate(diff)
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+function mondayOf(d: Date): Date {
+  const r = new Date(d)
+  const day = r.getDay()
+  r.setDate(r.getDate() - day + (day === 0 ? -6 : 1))
+  r.setHours(0, 0, 0, 0)
+  return r
+}
+
+function weekLabel(d: Date): string {
+  return mondayOf(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 function buildWeeklyProfitData(payments: Payment[], expenses: Expense[], weeksBack: number) {
@@ -67,21 +66,27 @@ function buildWeeklyProfitData(payments: Payment[], expenses: Expense[], weeksBa
 
   const revByWeek: Record<string, number> = {}
   const expByWeek: Record<string, number> = {}
-  const weeks = new Set<string>()
+  const weekStart: Record<string, number> = {}  // label → Monday timestamp for sorting
+
+  const touch = (d: Date, label: string) => {
+    if (!(label in weekStart)) weekStart[label] = mondayOf(d).getTime()
+  }
 
   payments.filter(p => asLocalDate(p.date) >= cutoff).forEach(p => {
-    const label = weekLabel(asLocalDate(p.date))
+    const d = asLocalDate(p.date)
+    const label = weekLabel(d)
     revByWeek[label] = (revByWeek[label] ?? 0) + p.amount
-    weeks.add(label)
+    touch(d, label)
   })
   expenses.filter(e => asLocalDate(e.date) >= cutoff).forEach(e => {
-    const label = weekLabel(asLocalDate(e.date))
+    const d = asLocalDate(e.date)
+    const label = weekLabel(d)
     expByWeek[label] = (expByWeek[label] ?? 0) + e.amount
-    weeks.add(label)
+    touch(d, label)
   })
 
-  return Array.from(weeks)
-    .sort((a, b) => new Date(a + ' 2026').getTime() - new Date(b + ' 2026').getTime())
+  return Object.keys(weekStart)
+    .sort((a, b) => weekStart[a] - weekStart[b])
     .map(week => ({
       week,
       revenue: revByWeek[week] ?? 0,
@@ -151,14 +156,13 @@ export default function FinanceDashboard({
   const [expError, setExpError] = useState('')
   const [localExpenses, setLocalExpenses] = useState(expenses)
 
-  const sparkline = useMemo(() => buildSparkline(payments), [payments])
-  const weeklyData = useMemo(() => buildWeeklyProfitData(payments, localExpenses, PERIOD_WEEKS[profitPeriod]), [payments, localExpenses, profitPeriod])
+  const sparkline    = useMemo(() => buildSparkline(payments), [payments])
+  const weeklyData   = useMemo(() => buildWeeklyProfitData(payments, localExpenses, PERIOD_WEEKS[profitPeriod]), [payments, localExpenses, profitPeriod])
   const periodRevenue = useMemo(() => sumRevenueForPeriod(payments, revenuePeriod), [payments, revenuePeriod])
-
-  const methodData = [
-    { name: 'Cash', value: payments.filter(p => p.method === 'CASH').reduce((s, p) => s + p.amount, 0) },
+  const methodData   = useMemo(() => [
+    { name: 'Cash',          value: payments.filter(p => p.method === 'CASH').reduce((s, p) => s + p.amount, 0) },
     { name: 'Bank Transfer', value: payments.filter(p => p.method === 'BANK_TRANSFER').reduce((s, p) => s + p.amount, 0) },
-  ].filter(d => d.value > 0)
+  ].filter(d => d.value > 0), [payments])
 
   const filteredPayments = txSearch.trim()
     ? payments.filter(p => p.memberName.toLowerCase().includes(txSearch.toLowerCase()) || (p.notes ?? '').toLowerCase().includes(txSearch.toLowerCase()))

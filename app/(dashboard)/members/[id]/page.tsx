@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import ArchiveMemberButton from '@/components/members/archive-member-button'
 import EmailParentButton from '@/components/members/email-parent-button'
+import { asLocalDate } from '@/lib/dates'
 
 const AVATAR_COLORS = [
   'from-brand-navy to-brand-teal', 'from-purple-600 to-indigo-500',
@@ -214,10 +215,10 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {allAttendance.map((a, i) => {
-                const ds = a.session.date.toISOString().slice(0, 10)
-                const label = new Date(ds + 'T12:00:00Z').toLocaleDateString('en-US', {
+                const label = asLocalDate(a.session.date).toLocaleDateString('en-US', {
                   weekday: 'short', month: 'short', day: 'numeric',
                 })
+                const ds = a.session.date.toISOString().slice(0, 10)
                 return (
                   <Link
                     key={a.id}
@@ -263,7 +264,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
                   <div>
                     <p className="text-sm font-semibold text-gray-800">${Number(p.amount).toFixed(2)}</p>
                     <p className="text-xs text-gray-400">
-                      {new Date(new Date(p.date).toISOString().slice(0,10) + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {asLocalDate(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       {p.notes ? ` · ${p.notes}` : ''}
                     </p>
                   </div>

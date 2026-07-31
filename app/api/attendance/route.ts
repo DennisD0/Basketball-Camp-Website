@@ -17,8 +17,8 @@ export async function GET(request: NextRequest) {
   try {
     if (month) {
       const [year, mon] = month.split('-').map(Number)
-      const start = new Date(year, mon - 1, 1)
-      const end = new Date(year, mon, 1)
+      const start = new Date(Date.UTC(year, mon - 1, 1))
+      const end = new Date(Date.UTC(year, mon, 1))
       const sessions = await prisma.session.findMany({
         where: { date: { gte: start, lt: end } },
         select: { date: true },
@@ -59,8 +59,8 @@ export async function DELETE(request: NextRequest) {
 
     if (month) {
       const [year, mon] = month.split('-').map(Number)
-      const start = new Date(year, mon - 1, 1)
-      const end = new Date(year, mon, 1)
+      const start = new Date(Date.UTC(year, mon - 1, 1))
+      const end = new Date(Date.UTC(year, mon, 1))
       const sessions = await prisma.session.findMany({
         where: { date: { gte: start, lt: end } },
         select: { id: true },

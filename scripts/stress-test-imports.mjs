@@ -9,13 +9,10 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { login, api, pass, fail, info, warn, section } from './lib.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CSV_DIR = path.join('C:\\Users\\Gyeonghwan Do\\Downloads')
-const BASE = 'http://localhost:3000'
-
-// Auth cookie — populated after login
-let AUTH_COOKIE = ''
 
 // ─────────────────────────────────────────────────────────────
 // CSV parsers (mirrors the client-side logic exactly)
@@ -346,31 +343,10 @@ function parseAttendanceCSV(text, year) {
 // HTTP helpers
 // ─────────────────────────────────────────────────────────────
 
-async function api(method, path, body) {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      Cookie: AUTH_COOKIE,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  const text = await res.text()
-  let json
-  try { json = JSON.parse(text) } catch { json = { raw: text } }
-  return { ok: res.ok, status: res.status, json }
-}
-
 function readCSV(filename) {
   const p = path.join(CSV_DIR, filename)
   return fs.readFileSync(p, 'utf-8')
 }
-
-function pass(msg) { console.log(`  ✅ ${msg}`) }
-function fail(msg) { console.log(`  ❌ ${msg}`) }
-function info(msg) { console.log(`  ℹ  ${msg}`) }
-function warn(msg) { console.log(`  ⚠  ${msg}`) }
-function section(title) { console.log(`\n${'─'.repeat(60)}\n${title}\n${'─'.repeat(60)}`) }
 
 // ─────────────────────────────────────────────────────────────
 // MAIN
@@ -381,23 +357,7 @@ async function main() {
 
   // ── 0. Auth ──────────────────────────────────────────────────
   section('0 · Auth')
-  const login = await fetch(`${BASE}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: '1234' }),
-  })
-  if (!login.ok) {
-    fail('Login failed — is the server running at localhost:3000?')
-    process.exit(1)
-  }
-  // Extract Set-Cookie header
-  const setCookie = login.headers.get('set-cookie') ?? ''
-  AUTH_COOKIE = setCookie.split(';')[0]  // e.g. "auth=<value>"
-  if (!AUTH_COOKIE) {
-    fail('No auth cookie returned by login')
-    process.exit(1)
-  }
-  pass(`Logged in, cookie: ${AUTH_COOKIE}`)
+  await login()
   const authCheck = await api('GET', '/api/members')
   if (authCheck.ok) pass('Auth verified — /api/members accessible')
   else fail(`Auth not working: ${JSON.stringify(authCheck.json)}`)
