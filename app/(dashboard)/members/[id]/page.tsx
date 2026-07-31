@@ -24,8 +24,15 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-export default async function MemberDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function MemberDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ month?: string }>
+}) {
   const { id } = await params
+  const { month: monthParam } = await searchParams
   const [member, payments, allAttendance] = await Promise.all([
     prisma.member.findUnique({ where: { id } }),
     prisma.payment.findMany({ where: { memberId: id }, orderBy: { date: 'desc' } }),
@@ -56,12 +63,19 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
     ? { color: 'text-orange-500', bar: 'bg-orange-400', bg: 'bg-orange-50', msg: 'Running low — consider notifying the parent.', msgColor: 'text-orange-500' }
     : { color: 'text-brand-teal', bar: 'bg-brand-teal', bg: 'bg-brand-teal/10', msg: '', msgColor: '' }
 
-  // Monthly mini-calendar
+  // Monthly mini-calendar — month param format: "YYYY-MM", defaults to current month
   const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth() + 1
+  const parsed = monthParam?.match(/^(\d{4})-(\d{2})$/)
+  const year  = parsed ? parseInt(parsed[1]) : now.getFullYear()
+  const month = parsed ? parseInt(parsed[2]) : now.getMonth() + 1
   const monthName = new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long' })
-  const today = new Date().toISOString().slice(0, 10)
+  const today = now.toISOString().slice(0, 10)
+
+  // Prev / next month links
+  const prevDate = new Date(Date.UTC(year, month - 2, 1))
+  const nextDate = new Date(Date.UTC(year, month, 1))
+  const prevParam = `${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth() + 1).padStart(2, '0')}`
+  const nextParam = `${nextDate.getUTCFullYear()}-${String(nextDate.getUTCMonth() + 1).padStart(2, '0')}`
 
   const thisMonthSet = new Set(
     allAttendance
@@ -150,7 +164,17 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
         {/* Mini calendar */}
         <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Attendance</p>
-          <p className="text-sm font-bold text-brand-navy mb-3">{monthName} {year}</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-bold text-brand-navy">{monthName} {year}</p>
+            <div className="flex gap-1">
+              <Link href={`?month=${prevParam}`} className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-navy transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><polyline points="15 18 9 12 15 6"/></svg>
+              </Link>
+              <Link href={`?month=${nextParam}`} className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-navy transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><polyline points="9 18 15 12 9 6"/></svg>
+              </Link>
+            </div>
+          </div>
 
           <div className="grid grid-cols-7 mb-1">
             {['S','M','T','W','T','F','S'].map((d, i) => (
