@@ -549,12 +549,12 @@ export default function ImportPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1.5 mb-5 bg-gray-100 p-1 rounded-2xl">
+      <div className="flex gap-1.5 mb-5 bg-gray-100 p-1 rounded-2xl overflow-x-auto scrollbar-none">
         {tabs.map(t => (
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
-            className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${
+            className={`flex-shrink-0 px-3 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
               activeTab === t.key
                 ? 'bg-white text-brand-navy shadow-sm'
                 : 'text-gray-500 hover:text-gray-700'

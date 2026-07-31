@@ -298,12 +298,12 @@ export default function FinanceDashboard({
 
       {/* Weekly Profit / Revenue / Expenses chart */}
       <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5">
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-5 gap-3">
           <div>
             <h2 className="font-semibold text-gray-800">Weekly Profit Breakdown</h2>
             <p className="text-xs text-gray-400 mt-0.5">Revenue vs Expenses per week</p>
           </div>
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl self-start sm:self-auto">
             {Object.keys(PERIOD_WEEKS).map(p => (
               <button
                 key={p}
