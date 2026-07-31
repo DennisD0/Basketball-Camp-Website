@@ -46,7 +46,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
   // carried over from the Student & Packages sheet (sessions burned before
   // check-in tracking started).
   const attendedCount = allAttendance.length
-  const sessionsUsed = member.sessionsUsed
+  const sessionsUsed = Math.max(member.sessionsUsed, attendedCount)
   const sessionsRemaining = Math.max(0, member.sessionsTotal - sessionsUsed)
   const sessionsPct = Math.min(Math.round((sessionsUsed / Math.max(member.sessionsTotal, 1)) * 100), 100)
 
