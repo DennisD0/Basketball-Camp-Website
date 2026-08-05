@@ -280,8 +280,8 @@ export default function RegistrationForm({ initialConfig }: { initialConfig?: Re
         <p className="text-gray-500 mb-6">We'll be in touch with next steps. See you on the court!</p>
         <div className="bg-[#F4F2EE] rounded-2xl p-5 text-left max-w-sm mx-auto">
           <p className="text-sm font-semibold text-gray-700 mb-2">Payment Instructions</p>
-          <p className="text-sm text-gray-500">Zelle: <span className="font-medium text-gray-800">347-200-4439</span></p>
-          <p className="text-xs text-gray-400 mt-2">Include your child's name in the memo.</p>
+          <p className="text-sm text-gray-500">{programInfo.paymentMethod}</p>
+          <p className="text-xs text-gray-400 mt-2">{programInfo.paymentNote}</p>
         </div>
       </div>
     )

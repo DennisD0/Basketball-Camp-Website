@@ -1,6 +1,8 @@
 import RegistrationForm from '@/components/register/registration-form'
 import { getRegistrationConfig } from '@/lib/get-registration-config'
 
+export const dynamic = 'force-dynamic'
+
 export default async function RegisterPage() {
   const { config } = await getRegistrationConfig()
   const { programInfo } = config
