@@ -73,7 +73,7 @@ export default async function LandingPage() {
                 href="/register"
                 className="inline-flex items-center gap-2 bg-brand-orange text-white font-semibold text-sm px-7 py-3.5 rounded-full hover:bg-brand-navy transition-all duration-200 active:scale-95 shadow-sm hover:shadow-md hover:-translate-y-0.5"
               >
-                Register for Summer 2026
+                Register for a Sport
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
               </Link>
               <a
