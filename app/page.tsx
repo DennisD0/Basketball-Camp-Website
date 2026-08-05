@@ -1,8 +1,21 @@
 import Link from 'next/link'
 import StickyNav from '@/components/landing/sticky-nav'
 import AnimateIn from '@/components/landing/animate-in'
+import { getRegistrationConfig } from '@/lib/get-registration-config'
 
-export default function LandingPage() {
+export const dynamic = 'force-dynamic'
+
+export default async function LandingPage() {
+  const { config } = await getRegistrationConfig()
+  const { programInfo, packages, sports } = config
+
+  const locationText = programInfo.locationLine.replace(/^\S+\s*/, '')
+  const commaIdx = locationText.indexOf(',')
+  const locationValue = commaIdx >= 0 ? locationText.slice(0, commaIdx) : locationText
+  const locationSub = commaIdx >= 0 ? locationText.slice(commaIdx + 1).trim() : ''
+  const scheduleRows = sports.flatMap(({ sport: s, slots }) =>
+    slots.map((slot, i) => ({ sport: s, time: slot.time, ages: slot.ages, key: `${s}-${i}` }))
+  )
   return (
     <div className="min-h-screen font-sans" style={{ fontFamily: 'Inter, system-ui, sans-serif', backgroundColor: '#EAE4D8' }}>
       <StickyNav />
@@ -362,14 +375,14 @@ export default function LandingPage() {
                 </h2>
                 <div className="space-y-5">
                   {[
-                    { label: 'Location', value: '58-06 Springfield Blvd', sub: 'Oakland Gardens, NY · Free parking' },
-                    { label: 'Packages', value: '5 sessions $150 · 7 sessions $200', sub: 'Complete within 7 or 9 weeks · Drop-in $32' },
-                    { label: 'Payment', value: 'Zelle 347-200-4439', sub: 'Include child\'s name in memo' },
+                    { label: 'Location', value: locationValue, sub: locationSub },
+                    { label: 'Packages', value: packages.slice(0, 2).map(p => `${p.label} ${p.price}`).join(' · '), sub: packages.slice(2).map(p => `${p.label} ${p.price}`).join(' · ') },
+                    { label: 'Payment', value: programInfo.paymentMethod, sub: programInfo.paymentNote },
                   ].map(({ label, value, sub }) => (
                     <div key={label} className="bg-white rounded-2xl px-5 py-4 ring-1 ring-brand-navy/5">
                       <p className="text-xs text-brand-navy/40 font-medium uppercase tracking-wider mb-1">{label}</p>
                       <p className="font-semibold text-brand-navy text-sm">{value}</p>
-                      <p className="text-brand-navy/40 text-xs mt-0.5">{sub}</p>
+                      {sub && <p className="text-brand-navy/40 text-xs mt-0.5">{sub}</p>}
                     </div>
                   ))}
                 </div>
@@ -379,17 +392,12 @@ export default function LandingPage() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-brand-orange mb-3">Weekly Schedule</p>
                 <div className="bg-white rounded-2xl overflow-hidden ring-1 ring-brand-navy/5 mb-5">
-                  {[
-                    { day: 'Tuesdays · Basketball', time: '4–5 PM', sub: 'Ages 7–12' },
-                    { day: 'Fridays · Basketball', time: '4–5 PM / 5–6 PM', sub: 'Ages 5–9 / Ages 9–12' },
-                    { day: 'Saturdays · Volleyball', time: '1–3 PM', sub: 'Middle – High School' },
-                  ].map(({ day, time, sub }, i) => (
-                    <div key={day} className={`flex items-center justify-between gap-4 px-6 py-5 ${i < 2 ? 'border-b border-brand-navy/5' : ''}`}>
+                  {scheduleRows.map(({ sport: s, time, ages, key }, i) => (
+                    <div key={key} className={`flex items-center justify-between gap-4 px-6 py-5 ${i < scheduleRows.length - 1 ? 'border-b border-brand-navy/5' : ''}`}>
                       <div>
-                        <p className="font-semibold text-brand-navy text-sm">{day}</p>
-                        <p className="text-brand-navy/40 text-xs mt-0.5">{sub}</p>
+                        <p className="font-semibold text-brand-navy text-sm">{s} · {time}</p>
+                        <p className="text-brand-navy/40 text-xs mt-0.5">{ages}</p>
                       </div>
-                      <p className="text-brand-navy/55 text-sm text-right flex-shrink-0">{time}</p>
                     </div>
                   ))}
                 </div>
@@ -419,39 +427,38 @@ export default function LandingPage() {
           </AnimateIn>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
-            {[
-              { tier: '5 Sessions', price: '$150', deadline: 'Complete within 7 weeks', hot: false, note: 'Great start' },
-              { tier: '7 Sessions', price: '$200', deadline: 'Complete within 9 weeks', hot: true, note: 'Best value' },
-              { tier: 'Drop-In', price: '$32', deadline: 'One day pass · either sport', hot: false, note: 'No commitment' },
-            ].map(({ tier, price, deadline, hot, note }, i) => (
-              <AnimateIn key={tier} delay={i * 70}>
-                <div className={`rounded-2xl p-7 ring-1 transition-all duration-200 hover:-translate-y-1 hover:shadow-md h-full flex flex-col ${
-                  hot
-                    ? 'bg-brand-navy ring-brand-navy'
-                    : 'bg-[#EAE4D8] ring-brand-navy/10 hover:ring-brand-navy/20'
-                }`}>
-                  {hot && (
-                    <span className="inline-block bg-brand-orange text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full mb-4 self-start">
-                      {note}
-                    </span>
-                  )}
-                  {!hot && <p className="text-brand-navy/40 text-xs font-medium mb-4">{note}</p>}
-                  <p className={`text-xs font-semibold uppercase tracking-widest mb-2 ${hot ? 'text-white/50' : 'text-brand-navy/40'}`}>{tier}</p>
-                  <p className={`font-bold text-5xl tracking-tight mb-1 ${hot ? 'text-white' : 'text-brand-navy'}`}>{price}</p>
-                  <p className={`text-xs mb-7 ${hot ? 'text-white/40' : 'text-brand-navy/30'}`}>{deadline}</p>
-                  <Link
-                    href="/register"
-                    className={`mt-auto block text-center text-sm font-semibold py-3 rounded-xl transition-all duration-200 active:scale-95 ${
-                      hot
-                        ? 'bg-brand-orange text-white hover:bg-brand-orange/90'
-                        : 'bg-white text-brand-navy ring-1 ring-brand-navy/15 hover:bg-brand-navy hover:text-white'
-                    }`}
-                  >
-                    Register Now
-                  </Link>
-                </div>
-              </AnimateIn>
-            ))}
+            {packages.map((p, i) => {
+              const hot = p.badge !== null
+              return (
+                <AnimateIn key={p.value} delay={i * 70}>
+                  <div className={`rounded-2xl p-7 ring-1 transition-all duration-200 hover:-translate-y-1 hover:shadow-md h-full flex flex-col ${
+                    hot
+                      ? 'bg-brand-navy ring-brand-navy'
+                      : 'bg-[#EAE4D8] ring-brand-navy/10 hover:ring-brand-navy/20'
+                  }`}>
+                    {hot && (
+                      <span className="inline-block bg-brand-orange text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full mb-4 self-start">
+                        {p.badge}
+                      </span>
+                    )}
+                    {!hot && <div className="mb-4" />}
+                    <p className={`text-xs font-semibold uppercase tracking-widest mb-2 ${hot ? 'text-white/50' : 'text-brand-navy/40'}`}>{p.label}</p>
+                    <p className={`font-bold text-5xl tracking-tight mb-1 ${hot ? 'text-white' : 'text-brand-navy'}`}>{p.price}</p>
+                    <p className={`text-xs mb-7 ${hot ? 'text-white/40' : 'text-brand-navy/30'}`}>{p.description}</p>
+                    <Link
+                      href="/register"
+                      className={`mt-auto block text-center text-sm font-semibold py-3 rounded-xl transition-all duration-200 active:scale-95 ${
+                        hot
+                          ? 'bg-brand-orange text-white hover:bg-brand-orange/90'
+                          : 'bg-white text-brand-navy ring-1 ring-brand-navy/15 hover:bg-brand-navy hover:text-white'
+                      }`}
+                    >
+                      Register Now
+                    </Link>
+                  </div>
+                </AnimateIn>
+              )
+            })}
           </div>
 
           <AnimateIn>
