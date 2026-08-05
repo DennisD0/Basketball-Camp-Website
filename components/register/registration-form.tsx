@@ -390,18 +390,18 @@ export default function RegistrationForm({ initialConfig }: { initialConfig?: Re
                           </span>
                         )}
                       </div>
-                      {/* Description broken into two visible chips so clients clearly see what they're buying */}
                       <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                        {p.description.split(' · ').map((part, i) => (
+                        {(p.highlight != null
+                          ? [{ text: p.description, orange: false }, { text: p.highlight, orange: true }]
+                          : p.description.split(' · ').map((text, i) => ({ text, orange: i > 0 }))
+                        ).map(({ text, orange }, i) => (
                           <span
                             key={i}
                             className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                              i === 0
-                                ? 'bg-brand-navy/8 text-brand-navy'
-                                : 'bg-brand-orange/10 text-brand-orange'
+                              orange ? 'bg-brand-orange/10 text-brand-orange' : 'bg-brand-navy/8 text-brand-navy'
                             }`}
                           >
-                            {part}
+                            {text}
                           </span>
                         ))}
                       </div>

@@ -264,7 +264,7 @@ function PackagesTab({ config, setConfig, touch }: TabProps) {
     touch()
   }
   function add() {
-    setConfig(c => ({ ...c, packages: [...c.packages, { value: `package_${Date.now()}`, label: '', price: '', sessions: 1, description: '', badge: null }] }))
+    setConfig(c => ({ ...c, packages: [...c.packages, { value: `package_${Date.now()}`, label: '', price: '', sessions: 1, description: '', highlight: null, badge: null }] }))
     touch()
   }
   function remove(i: number) {
@@ -312,9 +312,15 @@ function PackagesTab({ config, setConfig, touch }: TabProps) {
               <input value={p.badge ?? ''} onChange={e => update(i, { badge: e.target.value || null })} className={inputCls} placeholder="Best Value" />
             </div>
           </div>
-          <div>
-            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Description</label>
-            <input value={p.description} onChange={e => update(i, { description: e.target.value })} className={inputCls} placeholder="5 classes · complete within 7 weeks" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Description</label>
+              <input value={p.description} onChange={e => update(i, { description: e.target.value })} className={inputCls} placeholder="5 classes" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Highlight chip <span className="normal-case font-normal text-gray-300">(optional · shown in orange)</span></label>
+              <input value={p.highlight ?? ''} onChange={e => update(i, { highlight: e.target.value || null })} className={inputCls} placeholder="complete within 7 weeks" />
+            </div>
           </div>
         </div>
       ))}
