@@ -463,7 +463,7 @@ export default async function LandingPage() {
 
           <AnimateIn>
             <p className="text-center text-brand-navy/35 text-sm">
-              Session packages apply to one sport. Invite a friend to Volleyball and you both get 5% off — just let us know. No hidden fees.
+              Session packages apply to one sport. Register with a sibling or friend for Volleyball and you both get $20 off — just let us know. No hidden fees.
             </p>
           </AnimateIn>
         </div>

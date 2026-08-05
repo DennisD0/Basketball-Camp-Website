@@ -87,8 +87,8 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
       body: 'Drop-in sessions ($32/class) are pay-per-visit with no package commitment. Drop-in participants may attend available sessions subject to capacity. Drop-in does not apply toward session package counts.',
     },
     {
-      title: 'Referral Discount',
-      body: 'If you were referred by a current member and have provided their name, both parties will receive a 5% discount. If you are the one inviting someone, you must notify the admins so the discount can be verified and applied to both parties. This offer is exclusive to Volleyball registrations.',
+      title: 'Sibling / Friend Discount',
+      body: 'If you are registering with a sibling or friend and have provided their name, both parties will receive $20 off their package. The discount must be verified by an admin before it is applied. This offer is exclusive to Volleyball registrations.',
     },
   ],
 }
