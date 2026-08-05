@@ -464,17 +464,17 @@ export default function RegistrationForm({ initialConfig }: { initialConfig?: Re
           </fieldset>
         </div>
 
-        {/* Affiliate / Referral — volleyball only */}
+        {/* Sibling / Friend discount — volleyball only */}
         <div className={`transition-all duration-300 overflow-hidden ${
           form.sport === 'Volleyball' ? 'max-h-[300px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
         }`}>
           <hr className="border-gray-100 mb-6" />
           <fieldset>
-            <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Referral (Optional)</legend>
+            <legend className="text-sm font-semibold text-brand-navy mb-1 uppercase tracking-wide">Sibling / Bring a Friend Discount (Optional)</legend>
             <p className="text-xs text-gray-400 mb-3">
-              Were you invited by a current member? Enter their name and you both receive <span className="font-semibold text-brand-teal">5% off</span> — verified by admin. Volleyball only.
+              Registering with a sibling or friend? Enter their name and you both receive <span className="font-semibold text-brand-teal">$20 off</span> your package — verified by admin. Volleyball only.
             </p>
-            <Field label="Referred by (full name)">
+            <Field label="Sibling or friend's name">
               <input
                 type="text"
                 placeholder="Leave blank if not applicable"
