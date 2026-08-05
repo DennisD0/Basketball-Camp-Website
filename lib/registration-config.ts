@@ -8,6 +8,7 @@ export type SessionPackage = {
   price: string
   sessions: number
   description: string
+  highlight: string | null
   badge: string | null
 }
 export type SportSchedule = {
@@ -46,9 +47,9 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
     paymentNote: "Include child's name in memo",
   },
   packages: [
-    { value: '5_sessions', label: '5 Sessions', price: '$150', sessions: 5, description: '5 classes · complete within 7 weeks', badge: null },
-    { value: '7_sessions', label: '7 Sessions', price: '$200', sessions: 7, description: '7 classes · complete within 9 weeks', badge: 'Best Value' },
-    { value: 'drop_in', label: 'Drop-in', price: '$32', sessions: 1, description: 'Single class · no commitment', badge: null },
+    { value: '5_sessions', label: '5 Sessions', price: '$150', sessions: 5, description: '5 classes', highlight: 'complete within 7 weeks', badge: null },
+    { value: '7_sessions', label: '7 Sessions', price: '$200', sessions: 7, description: '7 classes', highlight: 'complete within 9 weeks', badge: 'Best Value' },
+    { value: 'drop_in', label: 'Drop-in', price: '$32', sessions: 1, description: 'Single class', highlight: null, badge: null },
   ],
   sports: [
     {
