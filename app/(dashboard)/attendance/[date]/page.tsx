@@ -130,7 +130,10 @@ export default async function AttendanceDatePage({
           ) : (
             <div className="space-y-2">
               {attendees.map(({ member, sessionsAttended }, idx) => {
-                const used = Math.max(member.sessionsUsed, sessionsAttended)
+                // Current-package count only — never max() against all-time
+                // attendance, which spans every package the student has bought.
+                void sessionsAttended
+                const used = member.sessionsUsed
                 const remaining = Math.max(0, member.sessionsTotal - used)
                 const pct = Math.min(Math.round((used / Math.max(member.sessionsTotal, 1)) * 100), 100)
                 const colors = sessionColor(remaining)

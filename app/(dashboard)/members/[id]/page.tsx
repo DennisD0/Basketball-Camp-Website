@@ -49,11 +49,14 @@ export default async function MemberDetailPage({
     : null
 
   const totalPaid = payments.reduce((s, p) => s + Number(p.amount), 0)
-  // Sessions used = whichever is higher: logged attendance, or the count
-  // carried over from the Student & Packages sheet (sessions burned before
-  // check-in tracking started).
+  // Sessions used counts only the CURRENT package. `member.sessionsUsed` is the
+  // coach-maintained figure from the Student & Packages sheet and is the source
+  // of truth. Do NOT max() it against all-time attendance: attendance spans every
+  // package a student has ever bought (the check-in sheet runs Mar–Jul), so a
+  // returning student's all-time count always exceeds a single package and
+  // pinned everyone to 0 remaining. Tracked as the reason for the package model.
   const attendedCount = allAttendance.length
-  const sessionsUsed = Math.max(member.sessionsUsed, attendedCount)
+  const sessionsUsed = member.sessionsUsed
   const sessionsRemaining = Math.max(0, member.sessionsTotal - sessionsUsed)
   const sessionsPct = Math.min(Math.round((sessionsUsed / Math.max(member.sessionsTotal, 1)) * 100), 100)
 
@@ -154,7 +157,7 @@ export default async function MemberDetailPage({
             <div className={`h-2 rounded-full transition-all ${sessionStatus.bar}`} style={{ width: `${sessionsPct}%` }} />
           </div>
           <p className="text-xs text-gray-500">
-            {sessionsUsed} sessions used · {attendedCount} logged in app
+            {sessionsUsed} used this package · {attendedCount} all-time check-in{attendedCount !== 1 ? 's' : ''}
           </p>
           {sessionStatus.msg && (
             <p className={`text-xs font-semibold mt-2 ${sessionStatus.msgColor}`}>{sessionStatus.msg}</p>
