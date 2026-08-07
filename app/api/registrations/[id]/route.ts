@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
 import { sendComposedEmail } from '@/lib/email'
+import { openNewPackage } from '@/lib/packages'
 
 const PROGRAM_LABELS: Record<string, string> = {
   early_bird:   'Early Bird ($350)',
@@ -49,6 +50,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const lastName = rest.join(' ') || '—'
       const teamAssignment = `${reg.ageGroup} ${reg.sport}`
 
+      const sessionsTotal = reg.packageOption === '5-week' ? 5 : 7
+
       const member = await prisma.member.create({
         data: {
           firstName,
@@ -57,12 +60,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           guardianName: reg.parentName,
           guardianEmail: reg.parentEmail,
           guardianPhone: reg.parentPhone,
-          sessionsTotal: reg.packageOption === '5-week' ? 5 : 7,
+          sessionsTotal,
           enrollmentDate: new Date(),
           status: 'ACTIVE',
         },
       })
       memberId = member.id
+
+      // Open their first package so check-ins decrement from day one. Without
+      // this the member falls back to the legacy columns, which attendance
+      // never writes to, and their counter would sit at full forever.
+      await openNewPackage(member.id, {
+        sessionsTotal,
+        packageType: reg.programOption,
+        notes: 'Created on registration approval',
+      })
 
       if (reg.parentEmail) {
         await sendComposedEmail({

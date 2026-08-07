@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import TakeAttendance from '@/components/attendance/take-attendance'
 import { avatarColor } from '@/lib/avatar'
+import { summarizeSessions } from '@/lib/sessions'
 
 function sessionColor(remaining: number) {
   if (remaining === 0) return { bar: 'bg-red-400', text: 'text-red-500', badge: 'bg-red-50 text-red-600' }
@@ -52,16 +53,34 @@ export default async function AttendanceDatePage({
     }
   }
 
+  // Per-member check-in dates + active package, so sessions remaining is scoped
+  // to the package the student is currently on. See lib/sessions.ts.
   const memberIds = Array.from(memberMap.keys())
-  const countRows = await prisma.attendance.groupBy({
-    by: ['memberId'],
-    where: { memberId: { in: memberIds }, status: 'PRESENT' },
-    _count: { memberId: true },
-  })
-  const countByMember = Object.fromEntries(countRows.map(r => [r.memberId, r._count.memberId]))
+  const [attRows, activePackages] = await Promise.all([
+    prisma.attendance.findMany({
+      where: { memberId: { in: memberIds }, status: 'PRESENT' },
+      select: { memberId: true, session: { select: { date: true } } },
+    }),
+    prisma.memberPackage.findMany({ where: { memberId: { in: memberIds }, endDate: null } }),
+  ])
+
+  const datesByMember = new Map<string, Date[]>()
+  for (const r of attRows) {
+    const arr = datesByMember.get(r.memberId)
+    if (arr) arr.push(r.session.date)
+    else datesByMember.set(r.memberId, [r.session.date])
+  }
+  const packageByMember = new Map(activePackages.map(p => [p.memberId, p]))
 
   const attendees = Array.from(memberMap.values())
-    .map(member => ({ member, sessionsAttended: countByMember[member.id] ?? 0 }))
+    .map(member => ({
+      member,
+      sessions: summarizeSessions(
+        member,
+        packageByMember.get(member.id) ?? null,
+        datesByMember.get(member.id) ?? [],
+      ),
+    }))
     .sort((a, b) => a.member.firstName.localeCompare(b.member.firstName))
 
   const label = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', {
@@ -129,13 +148,8 @@ export default async function AttendanceDatePage({
             </div>
           ) : (
             <div className="space-y-2">
-              {attendees.map(({ member, sessionsAttended }, idx) => {
-                // Current-package count only — never max() against all-time
-                // attendance, which spans every package the student has bought.
-                void sessionsAttended
-                const used = member.sessionsUsed
-                const remaining = Math.max(0, member.sessionsTotal - used)
-                const pct = Math.min(Math.round((used / Math.max(member.sessionsTotal, 1)) * 100), 100)
+              {attendees.map(({ member, sessions }, idx) => {
+                const { used, remaining, pct, total } = sessions
                 const colors = sessionColor(remaining)
                 const initials = `${member.firstName[0] ?? ''}${member.lastName?.[0] ?? ''}`.toUpperCase()
                 const bg = avatarColor(member.firstName + member.lastName)
@@ -170,7 +184,7 @@ export default async function AttendanceDatePage({
                       <div className="w-full bg-gray-100 rounded-full h-1.5">
                         <div className={`h-1.5 rounded-full ${colors.bar}`} style={{ width: `${pct}%` }} />
                       </div>
-                      <p className="text-[10px] text-gray-400 mt-1">{used}/{member.sessionsTotal} sessions used</p>
+                      <p className="text-[10px] text-gray-400 mt-1">{used}/{total} sessions used</p>
                     </div>
 
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-gray-300 flex-shrink-0">

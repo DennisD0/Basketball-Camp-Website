@@ -84,9 +84,9 @@ async function runImport(request: NextRequest) {
   for (const row of validRows as {
     firstName: string; lastName?: string; dateOfBirth?: string;
     guardianName?: string; guardianEmail?: string; guardianPhone?: string;
-    teamAssignment?: string; sessionsTotal?: number;
+    teamAssignment?: string; sessionsTotal?: number; sessionsUsed?: number;
   }[]) {
-    const { firstName, lastName, dateOfBirth, guardianName, guardianEmail, guardianPhone, teamAssignment, sessionsTotal } = row
+    const { firstName, lastName, dateOfBirth, guardianName, guardianEmail, guardianPhone, teamAssignment, sessionsTotal, sessionsUsed } = row
     const data = {
       firstName: firstName.trim(),
       lastName: (lastName ?? '').trim(),
@@ -96,6 +96,9 @@ async function runImport(request: NextRequest) {
       guardianPhone: guardianPhone?.trim() || undefined,
       teamAssignment: teamAssignment?.trim() || undefined,
       sessionsTotal: sessionsTotal ? Number(sessionsTotal) : undefined,
+      // Was silently dropped here while the other import path wrote it, so the
+      // same sheet produced different session counts depending on route taken.
+      sessionsUsed: sessionsUsed !== undefined ? Number(sessionsUsed) : undefined,
     }
     const raw = `${data.firstName} ${data.lastName}`.trim()
     const key = nameKey(raw)

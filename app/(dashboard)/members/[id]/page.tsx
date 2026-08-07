@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import ArchiveMemberButton from '@/components/members/archive-member-button'
 import EmailParentButton from '@/components/members/email-parent-button'
+import NewPackageButton from '@/components/members/new-package-button'
 import { asLocalDate } from '@/lib/dates'
+import { summarizeSessions } from '@/lib/sessions'
 
 const AVATAR_COLORS = [
   'from-brand-navy to-brand-teal', 'from-purple-600 to-indigo-500',
@@ -33,7 +35,7 @@ export default async function MemberDetailPage({
 }) {
   const { id } = await params
   const { month: monthParam } = await searchParams
-  const [member, payments, allAttendance] = await Promise.all([
+  const [member, payments, allAttendance, packages] = await Promise.all([
     prisma.member.findUnique({ where: { id } }),
     prisma.payment.findMany({ where: { memberId: id }, orderBy: { date: 'desc' } }),
     prisma.attendance.findMany({
@@ -41,6 +43,7 @@ export default async function MemberDetailPage({
       include: { session: true },
       orderBy: { session: { date: 'asc' } },
     }),
+    prisma.memberPackage.findMany({ where: { memberId: id }, orderBy: { startDate: 'desc' } }),
   ])
   if (!member) notFound()
 
@@ -49,16 +52,10 @@ export default async function MemberDetailPage({
     : null
 
   const totalPaid = payments.reduce((s, p) => s + Number(p.amount), 0)
-  // Sessions used counts only the CURRENT package. `member.sessionsUsed` is the
-  // coach-maintained figure from the Student & Packages sheet and is the source
-  // of truth. Do NOT max() it against all-time attendance: attendance spans every
-  // package a student has ever bought (the check-in sheet runs Mar–Jul), so a
-  // returning student's all-time count always exceeds a single package and
-  // pinned everyone to 0 remaining. Tracked as the reason for the package model.
-  const attendedCount = allAttendance.length
-  const sessionsUsed = member.sessionsUsed
-  const sessionsRemaining = Math.max(0, member.sessionsTotal - sessionsUsed)
-  const sessionsPct = Math.min(Math.round((sessionsUsed / Math.max(member.sessionsTotal, 1)) * 100), 100)
+  // All session arithmetic lives in lib/sessions.ts — never inline it here.
+  const activePackage = packages.find(p => p.endDate === null) ?? null
+  const sessions = summarizeSessions(member, activePackage, allAttendance.map(a => a.session.date))
+  const { used: sessionsUsed, remaining: sessionsRemaining, pct: sessionsPct, allTime: attendedCount } = sessions
 
   const sessionStatus = sessionsRemaining === 0
     ? { color: 'text-red-500', bar: 'bg-red-400', bg: 'bg-red-50', msg: 'All sessions used — renewal needed.', msgColor: 'text-red-500' }
@@ -151,7 +148,7 @@ export default async function MemberDetailPage({
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Sessions Remaining</p>
           <div className="flex items-end gap-1.5 mb-3">
             <span className={`text-5xl font-condensed font-bold leading-none ${sessionStatus.color}`}>{sessionsRemaining}</span>
-            <span className="text-sm text-gray-400 mb-1">/ {member.sessionsTotal}</span>
+            <span className="text-sm text-gray-400 mb-1">/ {sessions.total}</span>
           </div>
           <div className="w-full bg-white/60 rounded-full h-2 mb-2">
             <div className={`h-2 rounded-full transition-all ${sessionStatus.bar}`} style={{ width: `${sessionsPct}%` }} />
@@ -159,9 +156,23 @@ export default async function MemberDetailPage({
           <p className="text-xs text-gray-500">
             {sessionsUsed} used this package · {attendedCount} all-time check-in{attendedCount !== 1 ? 's' : ''}
           </p>
+          {sessions.startDate && (
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              {sessions.packageType ? `${sessions.packageType} · ` : ''}
+              started {asLocalDate(sessions.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              {packages.length > 1 ? ` · package #${packages.length}` : ''}
+            </p>
+          )}
           {sessionStatus.msg && (
             <p className={`text-xs font-semibold mt-2 ${sessionStatus.msgColor}`}>{sessionStatus.msg}</p>
           )}
+          <NewPackageButton
+            memberId={id}
+            playerName={member.firstName}
+            currentTotal={sessions.total}
+            urgent={sessionsRemaining === 0}
+            checkInDates={allAttendance.map(a => a.session.date.toISOString().slice(0, 10))}
+          />
         </div>
 
         {/* Mini calendar */}

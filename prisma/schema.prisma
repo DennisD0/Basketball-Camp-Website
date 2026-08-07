@@ -55,11 +55,44 @@ model Member {
   attendance    Attendance[]
   payments      Payment[]
   notifications Notification[]
+  packages      MemberPackage[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("members")
+}
+
+/// One row per package a student buys. This is what makes "sessions remaining"
+/// answerable: without a start date there is no way to tell which check-ins
+/// belong to the package the student is currently on, so all-time attendance
+/// leaks across renewals and pins returning students to 0 remaining.
+///
+/// Sessions used is DERIVED, never stored:
+///   used = carriedUsed + PRESENT attendance where startDate <= session.date < endDate
+/// so taking attendance decrements the package automatically with no write-back.
+model MemberPackage {
+  id            String    @id @default(cuid())
+  memberId      String    @map("member_id")
+  /// Display label from the sheet / registration form, e.g. "Silver", "Drop-in".
+  packageType   String?   @map("package_type")
+  sessionsTotal Int       @map("sessions_total")
+  /// Attendance on or after this date counts against this package.
+  startDate     DateTime  @map("start_date")
+  /// null = this is the active package. Set to the successor's startDate on renewal.
+  endDate       DateTime? @map("end_date")
+  /// Sessions burned before the app tracked check-ins (CSV migration), or a
+  /// manual correction by a coach. Added on top of the derived attendance count.
+  carriedUsed   Int       @default(0) @map("carried_used")
+  notes         String?
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([memberId, startDate])
+  @@map("member_packages")
 }
 
 model Session {
