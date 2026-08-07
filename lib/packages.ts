@@ -8,15 +8,33 @@ export function utcToday(): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
 }
 
+/** Marks a package as import-managed: created by backfill, resynced by backfill.
+ *  Packages opened by a coach (renewal) or by registration approval carry a
+ *  different note and are never rewritten. */
+export const BACKFILL_NOTE = 'Backfilled from Student & Packages sheet'
+
 /**
- * Give every member without an active package one, reconstructed from their
- * sheet counts plus check-in history so the numbers shown today do not move.
+ * Reconcile every member's active package against the Student & Packages sheet,
+ * using their check-in history to place the window so the number shown matches
+ * the sheet exactly.
  *
- * Idempotent: members who already have an active package are left alone, so this
- * is safe to re-run after each CSV import.
+ * Must run AFTER the Check-in CSV, since the window is derived from attendance.
+ *
+ * Two jobs, both required:
+ *  - members with no active package get one — without this they sit on the legacy
+ *    columns, which taking attendance never writes to, so their counter would
+ *    never move again after a reset + re-import.
+ *  - packages this function created are recomputed from the sheet's current
+ *    figures, so editing Sessions Total/Used and re-importing actually changes
+ *    what the app shows. Re-import declares the sheet authoritative, so an
+ *    in-app check-in not reflected in the sheet is reverted — same rule the
+ *    member columns have always followed.
+ *
+ * Idempotent: re-running with unchanged CSVs is a no-op.
  */
 export async function backfillPackages(): Promise<{
   created: number
+  resynced: number
   skipped: number
   details: { name: string; total: number; used: number; startDate: string; carried: number }[]
 }> {
@@ -31,11 +49,16 @@ export async function backfillPackages(): Promise<{
   })
 
   let created = 0
+  let resynced = 0
   let skipped = 0
   const details: { name: string; total: number; used: number; startDate: string; carried: number }[] = []
 
   for (const m of members) {
-    if (m.packages.length > 0) {
+    const active = m.packages[0] ?? null
+
+    // Coach-opened renewals and registration packages are authoritative — the
+    // sheet must not overwrite a package a human deliberately started.
+    if (active && active.notes !== BACKFILL_NOTE) {
       skipped++
       continue
     }
@@ -50,18 +73,30 @@ export async function backfillPackages(): Promise<{
       m.enrollmentDate,
     )
 
-    await prisma.memberPackage.create({
-      data: {
-        memberId: m.id,
-        packageType: m.packageType,
-        sessionsTotal: m.sessionsTotal,
-        startDate,
-        carriedUsed,
-        notes: 'Backfilled from Student & Packages sheet',
-      },
-    })
+    const data = {
+      packageType: m.packageType,
+      sessionsTotal: m.sessionsTotal,
+      startDate,
+      carriedUsed,
+      notes: BACKFILL_NOTE,
+    }
 
-    created++
+    if (!active) {
+      await prisma.memberPackage.create({ data: { memberId: m.id, ...data } })
+      created++
+    } else if (
+      active.sessionsTotal !== data.sessionsTotal ||
+      active.carriedUsed !== data.carriedUsed ||
+      active.startDate.getTime() !== startDate.getTime() ||
+      active.packageType !== data.packageType
+    ) {
+      await prisma.memberPackage.update({ where: { id: active.id }, data })
+      resynced++
+    } else {
+      skipped++
+      continue
+    }
+
     details.push({
       name: `${m.firstName} ${m.lastName}`.trim(),
       total: m.sessionsTotal,
@@ -71,7 +106,7 @@ export async function backfillPackages(): Promise<{
     })
   }
 
-  return { created, skipped, details }
+  return { created, resynced, skipped, details }
 }
 
 /**

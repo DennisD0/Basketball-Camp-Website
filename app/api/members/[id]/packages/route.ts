@@ -3,17 +3,32 @@ import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
 import { openNewPackage } from '@/lib/packages'
 
-/** Package history for a member, newest first. */
+/**
+ * Package history for a member, newest first, plus the check-in dates those
+ * packages are measured against — a package window means nothing without the
+ * attendance it is counting.
+ */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const cookieStore = await cookies()
   if (!cookieStore.has('auth')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
-  const packages = await prisma.memberPackage.findMany({
-    where: { memberId: id },
-    orderBy: { startDate: 'desc' },
+  const [packages, attendance] = await Promise.all([
+    prisma.memberPackage.findMany({
+      where: { memberId: id },
+      orderBy: { startDate: 'desc' },
+    }),
+    prisma.attendance.findMany({
+      where: { memberId: id, status: 'PRESENT' },
+      select: { session: { select: { date: true } } },
+      orderBy: { session: { date: 'asc' } },
+    }),
+  ])
+
+  return NextResponse.json({
+    packages,
+    attendanceDates: attendance.map(a => a.session.date.toISOString().slice(0, 10)),
   })
-  return NextResponse.json({ packages })
 }
 
 /** Renew: close the active package and start a fresh one. */

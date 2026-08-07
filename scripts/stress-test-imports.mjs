@@ -624,46 +624,130 @@ async function main() {
     fail(`Profit re-import not idempotent: ${JSON.stringify(profRes2.json)}`)
   }
 
-  // ── 7c. Sessions remaining, as the member page computes it ────
-  section('7c · Sessions Remaining (post-attendance)')
+  // ── 7c. Package cycles ────────────────────────────────────────
+  // Without a package row every member falls back to the legacy columns, which
+  // taking attendance never writes to — their counter would never move again.
+  // The import page fires this after each upload; assert it actually works.
+  section('7c · Package Cycle Reconciliation')
+  const bf = await api('POST', '/api/members/backfill-packages')
+  if (!bf.ok) fail(`Backfill failed: ${JSON.stringify(bf.json)}`)
+  else info(`Backfill: ${bf.json.created} created, ${bf.json.resynced ?? 0} resynced, ${bf.json.skipped} skipped`)
+
+  const bf2 = await api('POST', '/api/members/backfill-packages')
+  if (bf2.ok && bf2.json.created === 0 && (bf2.json.resynced ?? 0) === 0) {
+    pass('Backfill is idempotent: 0 created, 0 resynced on the second run')
+  } else {
+    fail(`REGRESSION: backfill not idempotent — ${JSON.stringify(bf2.json)}`)
+  }
+
+  // ── 7d. Sessions remaining, exactly as the member page computes it ──
+  section('7d · Sessions Remaining (post-attendance)')
   const membersFinal = (await api('GET', '/api/members')).json ?? []
-  // Logged-attendance counts come from the Check-in CSV we just imported,
-  // keyed by name (there is no global attendance list endpoint).
-  const attByName = new Map()
-  for (const m of members) {
-    attByName.set(m.name.trim().toLowerCase(), m.attendanceDates.length)
+
+  // Mirror of lib/sessions.ts summarizeSessions — the point is to catch the app
+  // drifting away from it, so this must NOT import the real implementation.
+  function summarize(member, pkg, dates) {
+    if (!pkg) {
+      return { total: member.sessionsTotal, used: member.sessionsUsed, source: 'legacy' }
+    }
+    const start = new Date(pkg.startDate).getTime()
+    const end = pkg.endDate ? new Date(pkg.endDate).getTime() : Infinity
+    const inWindow = dates.filter(d => {
+      const t = new Date(d + 'T00:00:00Z').getTime()
+      return t >= start && t < end
+    }).length
+    return { total: pkg.sessionsTotal, used: pkg.carriedUsed + inWindow, source: 'package' }
   }
-  const attByMember = new Map()
+
+  // Attendance must come from the DB, not the Check-in CSV. The sheets spell the
+  // same student several ways ("Ian #2", "Ian Kim (tall)") and the importer
+  // resolves them onto one member, so a CSV-name lookup silently reads zero
+  // check-ins for exactly the students most likely to be wrong.
+  const summaryByMember = new Map()
+  const datesByMember = new Map()
+  let legacyCount = 0
+  const multiActive = []
   for (const m of membersFinal) {
-    const k = `${m.firstName} ${m.lastName}`.trim().toLowerCase()
-    attByMember.set(m.id, attByName.get(k) ?? 0)
+    const { json } = await api('GET', `/api/members/${m.id}/packages`)
+    const actives = (json?.packages ?? []).filter(p => p.endDate === null)
+    if (actives.length > 1) multiActive.push(`${m.firstName} ${m.lastName}: ${actives.length} active packages`)
+    const dates = json?.attendanceDates ?? []
+    datesByMember.set(m.id, dates)
+    const s = summarize(m, actives[0] ?? null, dates)
+    if (s.source === 'legacy') legacyCount++
+    summaryByMember.set(m.id, { ...s, remaining: Math.max(0, s.total - s.used), allTime: dates.length })
   }
+
+  if (legacyCount === 0) pass(`All ${membersFinal.length} members are on a package cycle`)
+  else fail(`REGRESSION: ${legacyCount} members have no package — attendance will not decrement their sessions`)
+
+  if (multiActive.length === 0) pass('Exactly one active package per member')
+  else multiActive.forEach(b => fail(`REGRESSION: ${b}`))
+
   let shown = 0
   let zeroRemaining = 0
   for (const m of membersFinal) {
-    const logged = attByMember.get(m.id) ?? 0
-    const used = Math.max(logged, m.sessionsUsed)      // same formula the UI uses
-    const remaining = Math.max(0, m.sessionsTotal - used)
-    if (remaining === 0) zeroRemaining++
-    if (m.sessionsTotal > 0 && shown < 12) {
-      info(`${m.firstName} ${m.lastName}: ${remaining}/${m.sessionsTotal} left (used ${used} = ${logged} logged, ${m.sessionsUsed} carried)`)
+    const s = summaryByMember.get(m.id)
+    if (s.remaining === 0) zeroRemaining++
+    if (s.total > 0 && shown < 12) {
+      info(`${m.firstName} ${m.lastName}: ${s.remaining}/${s.total} left (${s.used} used this package, ${s.allTime} all-time)`)
       shown++
     }
   }
-  // Cross-check against the sheet's own "Sessions Left" column
+
+  // The sheet is the source of truth on import, so the app must land on its
+  // "Sessions Left" figure exactly — not merely stay under it. An off-by-any
+  // difference means the derived window disagrees with the coach's own count.
   const leftBad = []
   for (const p of packages) {
     const m = membersFinal.find(x => `${x.firstName} ${x.lastName}`.trim().toLowerCase() === `${p.firstName} ${p.lastName}`.trim().toLowerCase())
     if (!m) continue
-    const logged = attByMember.get(m.id) ?? 0
-    const remaining = Math.max(0, m.sessionsTotal - Math.max(logged, m.sessionsUsed))
-    if (remaining > p.sessionsLeft) {
-      leftBad.push(`${p.studentName}: app shows ${remaining} left, sheet says ${p.sessionsLeft}`)
+    const s = summaryByMember.get(m.id)
+    if (s.remaining !== p.sessionsLeft) {
+      leftBad.push(`${p.studentName}: app shows ${s.remaining} left, sheet says ${p.sessionsLeft}`)
     }
   }
-  if (leftBad.length === 0) pass('No student shows more sessions remaining than the sheet allows')
+  if (leftBad.length === 0) pass(`Sessions remaining matches the sheet exactly for all ${packages.length} students`)
   else leftBad.forEach(b => fail(b))
   info(`${zeroRemaining} students are fully used up (renewal needed)`)
+
+  // ── 7e. Taking attendance must decrement the package ──────────
+  // This is the whole point of the package model. Before it existed the
+  // attendance route never touched sessionsUsed, so the counter only ever moved
+  // on CSV import and a coach checking someone in changed nothing.
+  section('7e · Check-in Decrements Sessions Remaining')
+  const subject = membersFinal.find(m => {
+    const s = summaryByMember.get(m.id)
+    return s.source === 'package' && s.remaining > 0
+  })
+  if (!subject) {
+    warn('No member with sessions remaining — skipping decrement check')
+  } else {
+    const before = summaryByMember.get(subject.id)
+    // A date far past the sheet's range, so it lands inside the active window
+    // and cannot collide with an imported check-in.
+    const probeDate = '2026-12-15'
+    const mark = await api('POST', '/api/attendance', {
+      date: probeDate,
+      presentIds: [subject.id],
+      allMemberIds: [subject.id],
+    })
+    if (!mark.ok) {
+      fail(`Could not record probe check-in: ${JSON.stringify(mark.json)}`)
+    } else {
+      const { json } = await api('GET', `/api/members/${subject.id}/packages`)
+      const active = (json?.packages ?? []).find(p => p.endDate === null)
+      const after = summarize(subject, active, json?.attendanceDates ?? [])
+      const afterRemaining = Math.max(0, after.total - after.used)
+      if (afterRemaining === before.remaining - 1) {
+        pass(`${subject.firstName} ${subject.lastName}: ${before.remaining} → ${afterRemaining} after a check-in`)
+      } else {
+        fail(`REGRESSION: check-in did not decrement — ${before.remaining} → ${afterRemaining}`)
+      }
+      // Leave the DB as the spreadsheets describe it.
+      await api('DELETE', `/api/attendance?date=${probeDate}`)
+    }
+  }
 
   // `--clean` stops here: reset + one import pass, leaving the DB in the exact
   // state the spreadsheets describe. The race round below deliberately creates
@@ -674,10 +758,18 @@ async function main() {
       api('GET', '/api/members'), api('GET', '/api/expenses'), api('GET', '/api/trials'),
     ])
     const cp = await api('GET', '/api/finances/payments')
-    console.log(`  Members:         ${cm.json?.length ?? '?'}`)
-    console.log(`  Payments:        ${cp.json?.length ?? '?'} ($${(cp.json ?? []).reduce((s, p) => s + Number(p.amount), 0).toLocaleString()})`)
-    console.log(`  Expenses:        ${ce.json?.length ?? '?'}`)
-    console.log(`  Trial Students:  ${ct.json?.length ?? '?'}`)
+    // A summary must never crash a run whose assertions all passed: report the
+    // bad response instead of throwing on it.
+    const rows = (r, label) => {
+      if (Array.isArray(r.json)) return r.json
+      warn(`${label} returned ${r.status}, not a list: ${JSON.stringify(r.json).slice(0, 120)}`)
+      return []
+    }
+    const payRows = rows(cp, 'payments')
+    console.log(`  Members:         ${rows(cm, 'members').length}`)
+    console.log(`  Payments:        ${payRows.length} ($${payRows.reduce((s, p) => s + Number(p.amount), 0).toLocaleString()})`)
+    console.log(`  Expenses:        ${rows(ce, 'expenses').length}`)
+    console.log(`  Trial Students:  ${rows(ct, 'trials').length}`)
     console.log('')
     return
   }
@@ -726,11 +818,10 @@ async function main() {
 
   // ── 9. Final DB state summary ─────────────────────────────────
   section('9 · Final Database State Summary')
-  const [finalMembers, finalExpenses, finalTrials, finalSessions] = await Promise.all([
+  const [finalMembers, finalExpenses, finalTrials] = await Promise.all([
     api('GET', '/api/members'),
     api('GET', '/api/expenses'),
     api('GET', '/api/trials'),
-    fetch(`${BASE}/api/attendance`, { headers: { Cookie: AUTH_COOKIE } }).then(r => r.json()).catch(() => []),
   ])
   console.log(`  Members:         ${finalMembers.json?.length ?? '?'}`)
   console.log(`  Expenses:        ${finalExpenses.json?.length ?? '?'}`)

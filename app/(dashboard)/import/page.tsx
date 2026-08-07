@@ -3,6 +3,26 @@
 import { useState, useRef, useCallback } from 'react'
 
 // ── Shared utilities ────────────────────────────────────────────
+
+/**
+ * Reconcile package cycles against the freshly imported sheet figures.
+ *
+ * Runs after Student & Packages and after Check-in, because a member with no
+ * package row falls back to the legacy columns — which taking attendance never
+ * writes to, so their sessions counter would never move again after a reset.
+ * The endpoint is idempotent, so calling it from both tabs converges.
+ *
+ * Deliberately non-fatal: the CSV rows are already committed at this point, so
+ * a failure here must not present the import itself as failed.
+ */
+async function syncPackages(): Promise<void> {
+  try {
+    await fetch('/api/members/backfill-packages', { method: 'POST' })
+  } catch {
+    /* reconciliation is retried by the next import */
+  }
+}
+
 function parseCSVRow(line: string): string[] {
   const result: string[] = []
   let cur = ''
@@ -437,6 +457,7 @@ export default function ImportPage() {
       let data: { error?: string; membersCreated?: number; membersUpdated?: number; membersSkipped?: number; attendanceCreated?: number; attendanceSkipped?: number } = {}
       try { data = await res.json() } catch { /* empty body — likely a timeout */ }
       if (!res.ok) { setImportError(data.error ?? 'Import failed — the request may have timed out.'); setStatus('error'); return }
+      await syncPackages()
       setResult({ membersCreated: data.membersCreated ?? 0, membersUpdated: data.membersUpdated ?? 0, membersSkipped: data.membersSkipped ?? 0, attendanceCreated: data.attendanceCreated ?? 0, attendanceSkipped: data.attendanceSkipped ?? 0 })
       setStatus('done')
     } catch (e) {
@@ -1083,6 +1104,7 @@ function PackagesImportSection() {
       })
       const data = await res.json()
       if (!res.ok) { setErr(data.error ?? 'Import failed'); setStatus('error'); return }
+      await syncPackages()
       setResult(data); setStatus('done')
     } catch (e) { setErr(String(e)); setStatus('error') }
   }

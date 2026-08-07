@@ -3,8 +3,9 @@ import { cookies } from 'next/headers'
 import { backfillPackages } from '@/lib/packages'
 
 /**
- * Give every member without an active package one, reconstructed from their
- * sheet counts + check-in history. Idempotent — safe to re-run after an import.
+ * Reconcile package cycles with the Student & Packages sheet: create the missing
+ * ones, recompute the ones a previous import created. Idempotent — the import
+ * page calls it after every members/attendance upload.
  */
 export async function POST() {
   const cookieStore = await cookies()
