@@ -38,6 +38,35 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function PUT(req: NextRequest) {
+  if (!(await requireAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { id, description, category, amount, date } = await req.json()
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  if (!description?.trim() || !category?.trim() || !amount || !date) {
+    return NextResponse.json({ error: 'All fields required' }, { status: 400 })
+  }
+  const parsedAmount = parseFloat(amount)
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    return NextResponse.json({ error: 'Amount must be a positive number' }, { status: 400 })
+  }
+  try {
+    const expense = await prisma.expense.update({
+      where: { id },
+      data: {
+        description: description.trim(),
+        category: category.trim(),
+        amount: parsedAmount,
+        // Same UTC-midnight normalisation as create, so an edited row sorts and
+        // renders identically to one that was never touched.
+        date: new Date(date + 'T00:00:00Z'),
+      },
+    })
+    return NextResponse.json(expense)
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   if (!(await requireAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await req.json()

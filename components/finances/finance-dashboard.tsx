@@ -123,6 +123,14 @@ function SearchIcon() {
   )
 }
 
+function PencilIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+      <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
+    </svg>
+  )
+}
+
 function TrashIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -148,8 +156,10 @@ export default function FinanceDashboard({
   const [expSearch, setExpSearch] = useState('')
   const [activeTab, setActiveTab] = useState<'payments' | 'expenses'>('payments')
 
-  // Expense form state
+  // Expense form state. The same form does add and edit — `editingExpId` is the
+  // only difference, and null means add.
   const [showExpForm, setShowExpForm] = useState(false)
+  const [editingExpId, setEditingExpId] = useState<string | null>(null)
   const [expForm, setExpForm] = useState({ description: '', category: EXPENSE_CATS[0].value, amount: '', date: '' })
   const [customCategory, setCustomCategory] = useState(false)
   const [expSaving, setExpSaving] = useState(false)
@@ -175,22 +185,45 @@ export default function FinanceDashboard({
   const profitPositive = netProfit >= 0
   const localExpTotal = localExpenses.reduce((s, e) => s + e.amount, 0)
 
-  async function handleAddExpense(ev: React.FormEvent) {
+  function resetExpForm() {
+    setExpForm({ description: '', category: EXPENSE_CATS[0].value, amount: '', date: '' })
+    setCustomCategory(false)
+    setEditingExpId(null)
+    setExpError('')
+    setShowExpForm(false)
+  }
+
+  function startEditExpense(e: Expense) {
+    setEditingExpId(e.id)
+    setExpForm({
+      description: e.description,
+      category: e.category,
+      amount: String(e.amount),
+      // asLocalDate pins to noon UTC, so the date part round-trips to exactly
+      // what the API stored — no off-by-one from the browser's timezone.
+      date: asLocalDate(e.date).toISOString().slice(0, 10),
+    })
+    setCustomCategory(!EXPENSE_CATS.some(c => c.value === e.category))
+    setExpError('')
+    setShowExpForm(true)
+  }
+
+  async function handleSubmitExpense(ev: React.FormEvent) {
     ev.preventDefault()
     setExpSaving(true)
     setExpError('')
+    const editing = editingExpId !== null
     const res = await fetch('/api/expenses', {
-      method: 'POST',
+      method: editing ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(expForm),
+      body: JSON.stringify(editing ? { ...expForm, id: editingExpId } : expForm),
     })
     setExpSaving(false)
     if (res.ok) {
       const saved = await res.json()
-      setLocalExpenses(prev => [{ ...saved, amount: Number(saved.amount) }, ...prev])
-      setExpForm({ description: '', category: EXPENSE_CATS[0].value, amount: '', date: '' })
-      setCustomCategory(false)
-      setShowExpForm(false)
+      const row = { ...saved, amount: Number(saved.amount) }
+      setLocalExpenses(prev => (editing ? prev.map(e => (e.id === row.id ? row : e)) : [row, ...prev]))
+      resetExpForm()
     } else {
       const d = await res.json().catch(() => ({}))
       setExpError(d.error || 'Failed to save')
@@ -201,6 +234,9 @@ export default function FinanceDashboard({
     if (!confirm('Delete this expense?')) return
     await fetch('/api/expenses', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
     setLocalExpenses(prev => prev.filter(e => e.id !== id))
+    // Deleting the row currently open in the form would otherwise leave the
+    // form editing a record that no longer exists.
+    if (editingExpId === id) resetExpForm()
   }
 
   const inputCls = 'w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-teal/40 bg-white'
@@ -448,10 +484,13 @@ export default function FinanceDashboard({
         {/* EXPENSES TAB */}
         {activeTab === 'expenses' && (
           <>
-            {/* Add expense form */}
+            {/* Add / edit expense form */}
             {showExpForm && (
               <div className="px-5 pt-4 pb-4 border-b border-gray-100">
-                <form onSubmit={handleAddExpense} className="space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">
+                  {editingExpId ? 'Edit expense' : 'New expense'}
+                </p>
+                <form onSubmit={handleSubmitExpense} className="space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Description *</label>
@@ -512,11 +551,11 @@ export default function FinanceDashboard({
                   </div>
                   {expError && <p className="text-sm text-red-500 bg-red-50 rounded-lg px-3 py-2">{expError}</p>}
                   <div className="flex gap-2 pt-1">
-                    <button type="button" onClick={() => setShowExpForm(false)}
+                    <button type="button" onClick={resetExpForm}
                       className="flex-1 min-h-[40px] rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all">Cancel</button>
                     <button type="submit" disabled={expSaving}
                       className="flex-1 min-h-[40px] rounded-xl bg-brand-teal text-white text-sm font-semibold hover:bg-brand-teal/90 disabled:opacity-50 transition-all">
-                      {expSaving ? 'Saving…' : 'Save Expense'}
+                      {expSaving ? 'Saving…' : editingExpId ? 'Save Changes' : 'Save Expense'}
                     </button>
                   </div>
                 </form>
@@ -530,7 +569,7 @@ export default function FinanceDashboard({
                   className="w-full min-h-[40px] pl-9 pr-4 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/40 transition-all" />
               </div>
               {!showExpForm && (
-                <button onClick={() => setShowExpForm(true)}
+                <button onClick={() => { setEditingExpId(null); setShowExpForm(true) }}
                   className="min-h-[40px] px-4 rounded-xl bg-brand-navy text-white text-xs font-bold uppercase tracking-wide hover:bg-brand-navy/90 transition-all flex-shrink-0">
                   + Add
                 </button>
@@ -559,7 +598,10 @@ export default function FinanceDashboard({
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <span className="font-condensed font-bold text-base text-brand-orange">${e.amount.toFixed(2)}</span>
-                        <button onClick={() => handleDeleteExpense(e.id)} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                        <button onClick={() => startEditExpense(e)} aria-label={`Edit ${e.description}`} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-300 hover:text-brand-teal hover:bg-brand-teal/10 rounded-xl transition-colors">
+                          <PencilIcon />
+                        </button>
+                        <button onClick={() => handleDeleteExpense(e.id)} aria-label={`Delete ${e.description}`} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
                           <TrashIcon />
                         </button>
                       </div>
@@ -588,7 +630,8 @@ export default function FinanceDashboard({
                           </td>
                           <td className="px-5 py-3.5 font-bold text-brand-orange">${e.amount.toFixed(2)}</td>
                           <td className="px-5 py-3.5 text-gray-500 text-xs">{asLocalDate(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-                          <td className="px-5 py-3.5 text-right">
+                          <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                            <button onClick={() => startEditExpense(e)} className="text-xs text-gray-400 hover:text-brand-teal font-medium transition-colors mr-3">Edit</button>
                             <button onClick={() => handleDeleteExpense(e.id)} className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors">Delete</button>
                           </td>
                         </tr>

@@ -2,24 +2,65 @@ import prisma from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import PrintButton from '@/components/registrations/print-button'
 import { PROGRAM_LABELS, PROGRAM_PRICES } from '@/lib/programs'
+import { getRegistrationConfig } from '@/lib/get-registration-config'
 
-const PACKAGE_LABELS: Record<string, { label: string; sessions: number; window: string }> = {
+/**
+ * Which registration checkbox, if any, a contract section records the answer to.
+ *
+ * Matched on keywords rather than exact titles because staff can rename sections
+ * in the registration editor. A section that maps to nothing — Program
+ * Commitment, Drop-in Policy, the sibling discount — is printed as a plain term,
+ * which is right: those are terms of the agreement, not per-parent consents.
+ */
+function consentFor(
+  title: string,
+  reg: { injuryWaiver: boolean; noRefundAck: boolean; mediaConsent: boolean },
+): boolean | null {
+  const t = title.toLowerCase()
+  if (t.includes('injury') || t.includes('liability') || t.includes('waiver')) return reg.injuryWaiver
+  if (t.includes('refund')) return reg.noRefundAck
+  if (t.includes('media') || t.includes('photo')) return reg.mediaConsent
+  return null
+}
+
+/** Only for registrations taken before packages became staff-editable. Anything
+ *  newer resolves out of the live registration config instead. */
+const LEGACY_PACKAGE_LABELS: Record<string, { label: string; sessions: number; window: string }> = {
   '5-week': { label: '5-Week Package', sessions: 5, window: '7 weeks' },
   '7-week': { label: '7-Week Package', sessions: 7, window: '9 weeks' },
 }
 
 export default async function ContractPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const reg = await prisma.registration.findUnique({ where: { id } })
+  const [reg, { config }] = await Promise.all([
+    prisma.registration.findUnique({ where: { id } }),
+    getRegistrationConfig(),
+  ])
   if (!reg || reg.status !== 'APPROVED') notFound()
 
   const registeredOn = new Date(reg.createdAt).toLocaleDateString('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',
   })
 
-  const pkg = PACKAGE_LABELS[reg.packageOption] ?? { label: reg.packageOption, sessions: '—', window: '—' }
-  const programLabel = PROGRAM_LABELS[reg.programOption] ?? reg.programOption
-  const price = PROGRAM_PRICES[reg.programOption] ?? '—'
+  // Packages are staff-editable, so a modern registration's packageOption is a
+  // config value like `package_1785855391156`, not one of the two legacy keys.
+  // Resolve from the live config first — without this, a contract for any
+  // custom package prints a raw database key, no session count and no price.
+  const cfgPkg = config.packages.find(p => p.value === reg.packageOption)
+  const legacyPkg = LEGACY_PACKAGE_LABELS[reg.packageOption]
+
+  const pkgLabel: string = cfgPkg?.label ?? legacyPkg?.label ?? reg.packageOption
+  const pkgSessions: string | number = cfgPkg?.sessions ?? legacyPkg?.sessions ?? '—'
+  // The session window is the package's highlight ("Complete within 9 weeks").
+  const pkgWindow: string = cfgPkg?.highlight ?? legacyPkg?.window ?? '—'
+  const price = cfgPkg?.price ?? PROGRAM_PRICES[reg.programOption] ?? '—'
+
+  const sportLabel = reg.sport ? reg.sport.charAt(0).toUpperCase() + reg.sport.slice(1) : ''
+  const programLabel = PROGRAM_LABELS[reg.programOption]
+    ?? (sportLabel ? `${sportLabel} — ${pkgLabel}` : pkgLabel)
+  // Avoid printing the package name twice when it is already in the line above.
+  const programDetail = programLabel.includes(pkgLabel) ? (cfgPkg?.description?.trim() ?? '') : pkgLabel
+
   const invoiceNum = `413-${reg.id.slice(-6).toUpperCase()}`
 
   return (
@@ -39,6 +80,10 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
 
           /* Contract content fills the page */
           .contract-body { max-width: none !important; padding: 0 !important; }
+
+          /* Full terms now print, so the contract can run past one page —
+             never split a clause or the signature block across a page break. */
+          .agreement-row, .signature-block { break-inside: avoid; page-break-inside: avoid; }
 
           /* Colour-accurate backgrounds (Bill To box, etc.) */
           -webkit-print-color-adjust: exact;
@@ -106,10 +151,10 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
               <tr className="border-b border-gray-100">
                 <td className="py-3">
                   <p className="font-semibold text-gray-900">{programLabel}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{pkg.label}</p>
+                  {programDetail && <p className="text-xs text-gray-400 mt-0.5">{programDetail}</p>}
                 </td>
-                <td className="py-3 text-center text-gray-700">{pkg.sessions}</td>
-                <td className="py-3 text-center text-gray-400 text-xs">{pkg.window}</td>
+                <td className="py-3 text-center text-gray-700">{pkgSessions}</td>
+                <td className="py-3 text-center text-gray-400 text-xs">{pkgWindow}</td>
                 <td className="py-3 text-right font-bold text-gray-900">{price}</td>
               </tr>
             </tbody>
@@ -131,21 +176,28 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
           <p className="text-xs text-gray-400 mt-2">Include child&apos;s name in the memo. No spot is held until payment is received.</p>
         </div>
 
-        {/* ── Agreements ── */}
+        {/* ── Agreements ──
+             Driven by the same contractSections the /register page shows and the
+             registration editor edits. These used to be three hardcoded rows,
+             which silently dropped every other term — including the session
+             window in Program Commitment — and meant edits in the editor never
+             reached the printed contract. */}
         <div className="mb-8">
           <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Agreements</p>
           <div className="space-y-3">
-            <AgreementRow agreed={reg.injuryWaiver} label="Injury Liability Waiver"
-              detail="Parent understands this is a physical activity and releases the coaches and 413 Youth Club from liability for injuries." />
-            <AgreementRow agreed={reg.noRefundAck} label="No Refund Policy"
-              detail="All payments are final and non-refundable." />
-            <AgreementRow agreed={reg.mediaConsent} label="Media Consent"
-              detail="Parent gives permission for the child to appear in photos/videos for promotional and social media use." />
+            {config.contractSections.map(section => (
+              <AgreementRow
+                key={section.title}
+                agreed={consentFor(section.title, reg)}
+                label={section.title}
+                detail={section.body}
+              />
+            ))}
           </div>
         </div>
 
         {/* ── Signature block ── */}
-        <div className="mt-10 pt-8 border-t-2 border-gray-900">
+        <div className="signature-block mt-10 pt-8 border-t-2 border-gray-900">
           <p className="text-xs text-gray-500 mb-6">
             By signing below, the parent/guardian confirms all information above is accurate and agrees to all terms stated in this registration agreement.
           </p>
@@ -186,17 +238,21 @@ function InvoiceField({ label, value }: { label: string; value: string }) {
   )
 }
 
-function AgreementRow({ agreed, label, detail }: { agreed: boolean; label: string; detail: string }) {
+/** `agreed === null` means the section is a term of the agreement rather than
+ *  something the parent ticked — printed with a neutral marker, not a red ✕. */
+function AgreementRow({ agreed, label, detail }: { agreed: boolean | null; label: string; detail: string }) {
   return (
-    <div className="flex gap-3 text-sm">
+    <div className="flex gap-3 text-sm agreement-row">
       <span className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded flex items-center justify-center text-xs font-bold ${
-        agreed ? 'bg-gray-900 text-white' : 'bg-red-100 text-red-600'
+        agreed === null ? 'bg-gray-100 text-gray-400'
+          : agreed ? 'bg-gray-900 text-white'
+          : 'bg-red-100 text-red-600'
       }`}>
-        {agreed ? '✓' : '✕'}
+        {agreed === null ? '§' : agreed ? '✓' : '✕'}
       </span>
       <div>
         <p className="font-semibold text-gray-800">{label}</p>
-        <p className="text-xs text-gray-400 mt-0.5">{detail}</p>
+        <p className="text-xs text-gray-400 mt-0.5 whitespace-pre-line">{detail}</p>
       </div>
     </div>
   )
