@@ -2,17 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-
-const PRESETS = [
-  { label: '5 Sessions', sessions: 5, type: 'Bronze' },
-  { label: '7 Sessions', sessions: 7, type: 'Silver' },
-  { label: 'Drop-in', sessions: 1, type: 'Drop-in' },
-]
-
-function todayISO() {
-  const n = new Date()
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
-}
+import { PACKAGE_PRESETS as PRESETS, DEFAULT_PRESET, todayISO } from '@/lib/package-presets'
 
 export default function NewPackageButton({
   memberId,
@@ -33,7 +23,7 @@ export default function NewPackageButton({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [preset, setPreset] = useState(() => PRESETS.find(p => p.sessions === currentTotal) ?? PRESETS[1])
+  const [preset, setPreset] = useState(() => PRESETS.find(p => p.sessions === currentTotal) ?? DEFAULT_PRESET)
   const [custom, setCustom] = useState('')
   const [startDate, setStartDate] = useState(todayISO)
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
 import { sendComposedEmail } from '@/lib/email'
-import { openNewPackage } from '@/lib/packages'
+import { openNewPackage, REGISTRATION_NOTE } from '@/lib/packages'
 
 const PROGRAM_LABELS: Record<string, string> = {
   early_bird:   'Early Bird ($350)',
@@ -73,7 +73,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       await openNewPackage(member.id, {
         sessionsTotal,
         packageType: reg.programOption,
-        notes: 'Created on registration approval',
+        notes: REGISTRATION_NOTE,
       })
 
       if (reg.parentEmail) {

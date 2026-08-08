@@ -13,6 +13,14 @@ export function utcToday(): Date {
  *  different note and are never rewritten. */
 export const BACKFILL_NOTE = 'Backfilled from Student & Packages sheet'
 
+/** Stamped on the package created alongside a hand-added member. Distinct from
+ *  BACKFILL_NOTE on purpose: it puts the package in the renewal class, so a
+ *  later import never resyncs a student who is in no spreadsheet. */
+export const MANUAL_ENTRY_NOTE = 'Created on manual entry'
+
+/** Stamped on the package opened when staff approve a registration. */
+export const REGISTRATION_NOTE = 'Created on registration approval'
+
 /**
  * Reconcile every member's active package against the Student & Packages sheet,
  * using their check-in history to place the window so the number shown matches

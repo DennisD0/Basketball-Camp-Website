@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { PACKAGE_PRESETS, DEFAULT_PRESET, todayISO } from '@/lib/package-presets'
 
 type FormData = {
   firstName: string
@@ -21,8 +22,20 @@ type Props = {
 
 export default function MemberForm({ initialData, memberId }: Props) {
   const router = useRouter()
+  const isNew = !memberId
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Package fields apply to creation only. Editing a member must not silently
+  // restart their package — that is what the "New package" button on the member
+  // page is for, and it is the one place that closes the previous package.
+  const [preset, setPreset] = useState(DEFAULT_PRESET)
+  const [customSessions, setCustomSessions] = useState('')
+  const [packageStartDate, setPackageStartDate] = useState(todayISO)
+
+  const sessionsTotal = customSessions.trim() ? parseInt(customSessions, 10) : preset.sessions
+  const packageValid = Number.isInteger(sessionsTotal) && sessionsTotal >= 1 && sessionsTotal <= 100
+
   const [data, setData] = useState<FormData>({
     firstName:      initialData?.firstName      ?? '',
     lastName:       initialData?.lastName       ?? '',
@@ -41,13 +54,26 @@ export default function MemberForm({ initialData, memberId }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (isNew && !packageValid) {
+      setError('Sessions must be a whole number between 1 and 100')
+      return
+    }
     setLoading(true)
     setError(null)
+
+    const payload = isNew
+      ? {
+          ...data,
+          sessionsTotal,
+          packageType: customSessions.trim() ? null : preset.type,
+          packageStartDate,
+        }
+      : data
 
     const res = await fetch(memberId ? `/api/members/${memberId}` : '/api/members', {
       method: memberId ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     })
 
     if (!res.ok) {
@@ -91,6 +117,65 @@ export default function MemberForm({ initialData, memberId }: Props) {
           </div>
         </div>
       </div>
+
+      {isNew && (
+        <div className="bg-white rounded-xl p-6 shadow-sm">
+          <h2 className="font-semibold text-brand-navy mb-1">Package</h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Starts their first package so check-ins count down from day one.
+          </p>
+
+          <label className={label}>Sessions</label>
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {PACKAGE_PRESETS.map(p => {
+              const active = !customSessions.trim() && preset.label === p.label
+              return (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => { setPreset(p); setCustomSessions('') }}
+                  className={`min-h-[52px] rounded-lg border text-sm font-medium transition-all active:scale-95 ${
+                    active
+                      ? 'border-brand-teal bg-brand-teal/10 text-brand-teal'
+                      : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="customSessions" className={label}>Or a custom number</label>
+              <input
+                id="customSessions"
+                type="number"
+                min={1}
+                max={100}
+                value={customSessions}
+                onChange={e => setCustomSessions(e.target.value)}
+                placeholder="e.g. 10"
+                className={input}
+              />
+            </div>
+            <div>
+              <label htmlFor="packageStartDate" className={label}>Package start date</label>
+              <input
+                id="packageStartDate"
+                type="date"
+                value={packageStartDate}
+                onChange={e => setPackageStartDate(e.target.value)}
+                className={input}
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Backdate this if they already started attending.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl p-6 shadow-sm">
         <h2 className="font-semibold text-brand-navy mb-4">Guardian Info</h2>

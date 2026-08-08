@@ -383,6 +383,14 @@ export default function ImportPage() {
   const [showResetModal, setShowResetModal] = useState(false)
   const [resetStatus, setResetStatus] = useState<'idle' | 'deleting' | 'done' | 'error'>('idle')
 
+  // Members no CSV will restore — see GET /api/import/reset-preview.
+  type ResetPreview = {
+    members: { id: string; name: string; attendance: number; payments: number }[]
+    totals: { members: number; attendance: number; payments: number }
+  }
+  const [resetPreview, setResetPreview] = useState<ResetPreview | null>(null)
+  const [resetPreviewStatus, setResetPreviewStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle')
+
   // Delete by period
   const [periodMode, setPeriodMode] = useState<'month' | 'date'>('month')
   const [periodValue, setPeriodValue] = useState('')
@@ -502,6 +510,21 @@ export default function ImportPage() {
     }
   }
 
+  async function openResetModal() {
+    setShowResetModal(true)
+    setResetStatus('idle')
+    setResetPreview(null)
+    setResetPreviewStatus('loading')
+    try {
+      const res = await fetch('/api/import/reset-preview')
+      if (!res.ok) { setResetPreviewStatus('error'); return }
+      setResetPreview(await res.json())
+      setResetPreviewStatus('loaded')
+    } catch {
+      setResetPreviewStatus('error')
+    }
+  }
+
   async function handleReset() {
     setResetStatus('deleting')
     try {
@@ -541,7 +564,7 @@ export default function ImportPage() {
           </p>
         </div>
         <button
-          onClick={() => { setShowResetModal(true); setResetStatus('idle') }}
+          onClick={openResetModal}
           className="flex-shrink-0 flex items-center gap-1.5 text-xs font-medium text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl transition-all active:scale-95"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
@@ -843,9 +866,44 @@ export default function ImportPage() {
             </div>
 
             <h2 className="font-condensed font-bold text-xl text-brand-navy text-center mb-1">Reset all data?</h2>
-            <p className="text-sm text-gray-500 text-center mb-6">
+            <p className="text-sm text-gray-500 text-center mb-4">
               This will permanently delete all <strong>members</strong>, <strong>attendance records</strong>, <strong>sessions</strong>, and <strong>payments</strong>. Registrations are kept. This cannot be undone.
             </p>
+
+            {resetPreviewStatus === 'loading' && (
+              <p className="text-xs text-gray-400 text-center mb-4">Checking what the CSVs can restore…</p>
+            )}
+
+            {resetPreviewStatus === 'error' && (
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-4 text-center">
+                Could not check which records the CSVs can restore. Re-uploading may not bring everything back.
+              </p>
+            )}
+
+            {resetPreviewStatus === 'loaded' && resetPreview && resetPreview.totals.members > 0 && (
+              <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 mb-4">
+                <p className="text-[11px] text-amber-900 leading-relaxed mb-2">
+                  <span className="font-semibold">
+                    {resetPreview.totals.members} {resetPreview.totals.members === 1 ? 'student is' : 'students are'} in
+                    no spreadsheet.
+                  </span>{' '}
+                  They were added by hand or created from a registration, so re-uploading the CSVs
+                  will <strong>not</strong> bring them back — along with {resetPreview.totals.attendance} check-in
+                  {resetPreview.totals.attendance === 1 ? '' : 's'} and {resetPreview.totals.payments} payment
+                  {resetPreview.totals.payments === 1 ? '' : 's'}.
+                </p>
+                <ul className="max-h-28 overflow-y-auto text-[11px] text-amber-800 space-y-0.5">
+                  {resetPreview.members.map(m => (
+                    <li key={m.id} className="flex justify-between gap-2">
+                      <span className="truncate">{m.name}</span>
+                      <span className="shrink-0 tabular-nums text-amber-700/70">
+                        {m.attendance} check-in{m.attendance === 1 ? '' : 's'} · {m.payments} payment{m.payments === 1 ? '' : 's'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {resetStatus === 'error' && (
               <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2 mb-4 text-center">Something went wrong. Please try again.</p>
@@ -861,7 +919,7 @@ export default function ImportPage() {
               </button>
               <button
                 onClick={handleReset}
-                disabled={resetStatus === 'deleting'}
+                disabled={resetStatus === 'deleting' || resetPreviewStatus === 'loading'}
                 className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50"
               >
                 {resetStatus === 'deleting' ? 'Deleting…' : 'Yes, delete everything'}
