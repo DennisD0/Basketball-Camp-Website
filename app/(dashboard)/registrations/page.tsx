@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma'
+import { getRegistrationConfig } from '@/lib/get-registration-config'
 import RegistrationList from '@/components/registrations/registration-list'
 import AutoRefresh from '@/components/auto-refresh'
 import RegistrationEditor from '@/components/registrations/registration-editor'
@@ -15,6 +16,9 @@ export default async function RegistrationsPage() {
     return <EmptyState message="Could not reach the database. Add your DATABASE_URL in Vercel environment variables and redeploy." />
   }
 
+  // The list is a client component, so the packages it needs to name each
+  // registration's program have to come down from here.
+  const { config } = await getRegistrationConfig()
   const pendingCount = registrations.filter(r => r.status === 'PENDING').length
 
   return (
@@ -40,7 +44,7 @@ export default async function RegistrationsPage() {
           No registrations yet. Share your public registration link to start receiving signups.
         </div>
       ) : (
-        <RegistrationList registrations={registrations} />
+        <RegistrationList registrations={registrations} packages={config.packages} />
       )}
     </div>
   )

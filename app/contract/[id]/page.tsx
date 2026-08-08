@@ -2,7 +2,7 @@ import prisma from '@/lib/prisma'
 import { notFound, redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import PrintButton from '@/components/registrations/print-button'
-import { PROGRAM_LABELS, PROGRAM_PRICES } from '@/lib/programs'
+import { resolveProgram } from '@/lib/programs'
 import { getRegistrationConfig } from '@/lib/get-registration-config'
 import { AGREEMENTS, AGREEMENT_ORDER, type AgreementKey } from '@/lib/agreements'
 
@@ -28,13 +28,6 @@ function accepted(
   }
 }
 
-/** Only for registrations taken before packages became staff-editable. Anything
- *  newer resolves out of the live registration config instead. */
-const LEGACY_PACKAGE_LABELS: Record<string, { label: string; sessions: number; window: string }> = {
-  '5-week': { label: '5-Week Package', sessions: 5, window: '7 weeks' },
-  '7-week': { label: '7-Week Package', sessions: 7, window: '9 weeks' },
-}
-
 export default async function ContractPage({ params }: { params: Promise<{ id: string }> }) {
   // This route deliberately sits outside the (dashboard) group so the contract
   // renders on its own — inside the group it inherited the sidebar, and the
@@ -55,24 +48,10 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
     month: 'long', day: 'numeric', year: 'numeric',
   })
 
-  // Packages are staff-editable, so a modern registration's packageOption is a
-  // config value like `package_1785855391156`, not one of the two legacy keys.
-  // Resolve from the live config first — without this, a contract for any
-  // custom package prints a raw database key, no session count and no price.
-  const cfgPkg = config.packages.find(p => p.value === reg.packageOption)
-  const legacyPkg = LEGACY_PACKAGE_LABELS[reg.packageOption]
-
-  const pkgLabel: string = cfgPkg?.label ?? legacyPkg?.label ?? reg.packageOption
-  const pkgSessions: string | number = cfgPkg?.sessions ?? legacyPkg?.sessions ?? '—'
-  // The session window is the package's highlight ("Complete within 9 weeks").
-  const pkgWindow: string = cfgPkg?.highlight ?? legacyPkg?.window ?? '—'
-  const price = cfgPkg?.price ?? PROGRAM_PRICES[reg.programOption] ?? '—'
-
-  const sportLabel = reg.sport ? reg.sport.charAt(0).toUpperCase() + reg.sport.slice(1) : ''
-  const programLabel = PROGRAM_LABELS[reg.programOption]
-    ?? (sportLabel ? `${sportLabel} — ${pkgLabel}` : pkgLabel)
+  const program = resolveProgram(reg, config.packages)
+  const { title: programLabel, packageLabel, sessions: pkgSessions, window: pkgWindow, price } = program
   // Avoid printing the package name twice when it is already in the line above.
-  const programDetail = programLabel.includes(pkgLabel) ? (cfgPkg?.description?.trim() ?? '') : pkgLabel
+  const programDetail = programLabel.includes(packageLabel) ? program.description : packageLabel
 
   const invoiceNum = `413-${reg.id.slice(-6).toUpperCase()}`
 

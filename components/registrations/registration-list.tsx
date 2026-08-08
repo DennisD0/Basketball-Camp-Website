@@ -4,24 +4,17 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { Registration } from '@prisma/client'
+import { resolveProgram } from '@/lib/programs'
+import type { SessionPackage } from '@/lib/registration-config'
 
 type Status = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'
 
-const PROGRAM_LABELS: Record<string, { label: string; cls: string }> = {
-  // new keys
-  basketball_5_sessions: { label: 'Basketball 5 Sessions · $150', cls: 'bg-brand-teal/10 text-brand-teal' },
-  basketball_7_sessions: { label: 'Basketball 7 Sessions · $200', cls: 'bg-brand-teal/10 text-brand-teal' },
-  basketball_drop_in:    { label: 'Basketball Drop-in · $32',     cls: 'bg-blue-50 text-blue-700' },
-  volleyball_5_sessions: { label: 'Volleyball 5 Sessions · $150', cls: 'bg-purple-50 text-purple-700' },
-  volleyball_7_sessions: { label: 'Volleyball 7 Sessions · $200', cls: 'bg-purple-50 text-purple-700' },
-  volleyball_drop_in:    { label: 'Volleyball Drop-in · $32',     cls: 'bg-blue-50 text-blue-700' },
-  // legacy keys
-  basketball_early_bird:   { label: 'Basketball Early Bird · $350',  cls: 'bg-green-50 text-green-700' },
-  basketball_memorial_day: { label: 'Basketball Best Deal · $300',   cls: 'bg-purple-50 text-purple-700' },
-  basketball_regular:      { label: 'Basketball Standard · $400',    cls: 'bg-gray-100 text-gray-600' },
-  volleyball_early_bird:   { label: 'Volleyball Early Bird · $350',  cls: 'bg-green-50 text-green-700' },
-  volleyball_memorial_day: { label: 'Volleyball Best Deal · $300',   cls: 'bg-purple-50 text-purple-700' },
-  volleyball_regular:      { label: 'Volleyball Standard · $400',    cls: 'bg-gray-100 text-gray-600' },
+/** Badge tint. Drop-ins read differently from a package, so they get their own. */
+function programTint(sport: string, sessions: number | string): string {
+  if (sessions === 1) return 'bg-blue-50 text-blue-700'
+  return sport.toLowerCase().startsWith('volley')
+    ? 'bg-purple-50 text-purple-700'
+    : 'bg-brand-teal/10 text-brand-teal'
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -81,9 +74,11 @@ function ActionButtons({ id, onDone }: { id: string; onDone: (memberId: string |
   )
 }
 
-function RegistrationCard({ r, onRefresh }: { r: Registration; onRefresh: () => void }) {
+function RegistrationCard({ r, packages, onRefresh }: { r: Registration; packages: SessionPackage[]; onRefresh: () => void }) {
   const [result, setResult] = useState<{ approved: boolean; memberId: string | null } | null>(null)
-  const prog = PROGRAM_LABELS[r.programOption] ?? { label: r.programOption, cls: 'bg-gray-100 text-gray-600' }
+  // Resolved against the live packages — a hardcoded map here used to fall
+  // through and show the raw `volleyball_package_1785855391156` on the card.
+  const program = resolveProgram(r, packages)
 
   function handleDone(memberId: string | null) {
     setResult({ approved: memberId !== null, memberId })
@@ -117,8 +112,8 @@ function RegistrationCard({ r, onRefresh }: { r: Registration; onRefresh: () => 
             <span className="text-xs px-2 py-0.5 rounded-full bg-brand-teal/10 text-brand-teal font-medium">
               {r.ageGroup} {r.sport}
             </span>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${prog.cls}`}>
-              {prog.label}
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${programTint(r.sport, program.sessions)}`}>
+              {program.title} · {program.price}
             </span>
           </div>
           <p className="text-xs text-gray-500 mt-1">
@@ -170,7 +165,7 @@ function Consent({ ok, label }: { ok: boolean; label: string }) {
   )
 }
 
-export default function RegistrationList({ registrations }: { registrations: Registration[] }) {
+export default function RegistrationList({ registrations, packages }: { registrations: Registration[]; packages: SessionPackage[] }) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<Status>('PENDING')
 
@@ -222,7 +217,7 @@ export default function RegistrationList({ registrations }: { registrations: Reg
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {filtered.map(r => (
-            <RegistrationCard key={r.id} r={r} onRefresh={() => router.refresh()} />
+            <RegistrationCard key={r.id} r={r} packages={packages} onRefresh={() => router.refresh()} />
           ))}
         </div>
       )}

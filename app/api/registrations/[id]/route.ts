@@ -3,15 +3,19 @@ import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
 import { sendComposedEmail } from '@/lib/email'
 import { openNewPackage, REGISTRATION_NOTE } from '@/lib/packages'
+import { resolveProgram } from '@/lib/programs'
+import { getRegistrationConfig } from '@/lib/get-registration-config'
+import type { SessionPackage } from '@/lib/registration-config'
 
-const PROGRAM_LABELS: Record<string, string> = {
-  early_bird:   'Early Bird ($350)',
-  memorial_day: 'Memorial Day Sale ($300)',
-  regular:      'Regular ($400)',
-}
-
-function approvalEmailBody(reg: { parentName: string; childName: string; sport: string; ageGroup: string; programOption: string }) {
-  const program = PROGRAM_LABELS[reg.programOption] ?? reg.programOption
+function approvalEmailBody(
+  reg: { parentName: string; childName: string; sport: string; ageGroup: string; programOption: string; packageOption: string },
+  packages: SessionPackage[],
+) {
+  // Previously a local map of three legacy keys, so a parent who bought any
+  // staff-created package was emailed the raw value — "Program:
+  // volleyball_package_1785855391156" — instead of what they paid for.
+  const resolved = resolveProgram(reg, packages)
+  const program = `${resolved.title} — ${resolved.price}`
   return `Hi ${reg.parentName},
 
 Great news — ${reg.childName}'s registration for 413 Youth Club (${reg.ageGroup} ${reg.sport}) has been approved!
@@ -77,11 +81,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       })
 
       if (reg.parentEmail) {
+        const { config } = await getRegistrationConfig()
         await sendComposedEmail({
           to:           reg.parentEmail,
           guardianName: reg.parentName,
           subject:      `${reg.childName} is registered for 413 Youth Club! 🏀`,
-          body:         approvalEmailBody(reg),
+          body:         approvalEmailBody(reg, config.packages),
         })
 
         await prisma.notification.create({
