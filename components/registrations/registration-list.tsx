@@ -1,64 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import type { Registration } from '@prisma/client'
-
-function ContractPreviewPanel({ id, onClose }: { id: string; onClose: () => void }) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
-    }
-  }, [onClose])
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col bg-gray-900/95"
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-800 border-b border-gray-700 flex-shrink-0">
-        <span className="text-sm font-semibold text-gray-200">Contract Preview</span>
-        <div className="flex items-center gap-3">
-          <a
-            href={`/contract/${id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gray-700 text-gray-200 rounded-lg hover:bg-gray-600 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-              <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
-            </svg>
-            Open &amp; Print
-          </a>
-          <button
-            onClick={onClose}
-            className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* PDF viewer area */}
-      <div className="flex-1 overflow-hidden p-4">
-        <div className="h-full max-w-4xl mx-auto rounded-xl overflow-hidden shadow-2xl">
-          <iframe
-            src={`/contract/${id}`}
-            className="w-full h-full border-0 bg-white"
-            title="Contract Preview"
-          />
-        </div>
-      </div>
-    </div>
-  )
-}
 
 type Status = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'
 
@@ -138,7 +83,6 @@ function ActionButtons({ id, onDone }: { id: string; onDone: (memberId: string |
 
 function RegistrationCard({ r, onRefresh }: { r: Registration; onRefresh: () => void }) {
   const [result, setResult] = useState<{ approved: boolean; memberId: string | null } | null>(null)
-  const [showPreview, setShowPreview] = useState(false)
   const prog = PROGRAM_LABELS[r.programOption] ?? { label: r.programOption, cls: 'bg-gray-100 text-gray-600' }
 
   function handleDone(memberId: string | null) {
@@ -147,8 +91,6 @@ function RegistrationCard({ r, onRefresh }: { r: Registration; onRefresh: () => 
   }
 
   return (
-    <>
-    {showPreview && <ContractPreviewPanel id={r.id} onClose={() => setShowPreview(false)} />}
     <div className={`bg-white rounded-2xl shadow-sm ring-1 transition-all duration-300 ${
       result ? (result.approved ? 'ring-green-200' : 'ring-red-200') : 'ring-black/5'
     } p-5 flex flex-col gap-4`}>
@@ -203,19 +145,18 @@ function RegistrationCard({ r, onRefresh }: { r: Registration; onRefresh: () => 
         {r.status === 'PENDING' && !result ? (
           <ActionButtons id={r.id} onDone={handleDone} />
         ) : (r.status === 'APPROVED' || result?.approved) ? (
-          <button
-            onClick={() => setShowPreview(true)}
+          <Link
+            href={`/contract/${r.id}`}
             className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-gray-50 text-gray-600 rounded-full hover:bg-gray-100 active:scale-95 transition-all ring-1 ring-black/10"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
             </svg>
             Preview Contract
-          </button>
+          </Link>
         ) : null}
       </div>
     </div>
-    </>
   )
 }
 
