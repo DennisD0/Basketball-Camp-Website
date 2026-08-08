@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { DEFAULT_CONFIG, type RegistrationConfig, type ContractSection, type SessionPackage } from '@/lib/registration-config'
+import { agreementLabel } from '@/lib/agreements'
 
 function sportProgramKey(sport: string, pkg: string) {
   return `${sport.toLowerCase()}_${pkg}`
@@ -497,27 +498,27 @@ export default function RegistrationForm({ initialConfig }: { initialConfig?: Re
               required
               checked={form.injuryWaiver}
               onChange={v => set('injuryWaiver', v)}
-              label="Injury Liability Waiver — I acknowledge the risks of physical activity and release 413 Youth Club and its staff from liability for injury during sessions."
+              label={agreementLabel('injuryWaiver')}
             />
             <Checkbox
               id="refund"
               required
               checked={form.noRefundAck}
               onChange={v => set('noRefundAck', v)}
-              label="No Refund Policy — I understand that session packages are non-refundable. Make-up sessions will be offered for club-cancelled classes."
+              label={agreementLabel('noRefundAck')}
             />
             <Checkbox
               id="competing"
               required
               checked={form.competingAck}
               onChange={v => set('competingAck', v)}
-              label="Session Window — I understand that all purchased sessions must be completed within the program window (7 weeks for the 5-session package; 9 weeks for the 7-session package). Sessions do not carry over beyond the window."
+              label={agreementLabel('sessionWindow')}
             />
             <Checkbox
               id="media"
               checked={form.mediaConsent}
               onChange={v => set('mediaConsent', v)}
-              label="Media Consent — I give permission for my child to appear in photos/videos for promotional and social media use."
+              label={agreementLabel('mediaConsent')}
             />
           </div>
         </fieldset>

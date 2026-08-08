@@ -3,24 +3,28 @@ import { notFound } from 'next/navigation'
 import PrintButton from '@/components/registrations/print-button'
 import { PROGRAM_LABELS, PROGRAM_PRICES } from '@/lib/programs'
 import { getRegistrationConfig } from '@/lib/get-registration-config'
+import { AGREEMENTS, AGREEMENT_ORDER, type AgreementKey } from '@/lib/agreements'
 
 /**
- * Which registration checkbox, if any, a contract section records the answer to.
+ * Whether the parent accepted a given agreement.
  *
- * Matched on keywords rather than exact titles because staff can rename sections
- * in the registration editor. A section that maps to nothing — Program
- * Commitment, Drop-in Policy, the sibling discount — is printed as a plain term,
- * which is right: those are terms of the agreement, not per-parent consents.
+ * Session Window is not stored. The registration form requires it — submission
+ * is blocked without it — but `competingAck` is never included in the POST body
+ * and the Registration model has no column for it, so every stored registration
+ * necessarily accepted it even though nothing recorded the fact. Printed as
+ * accepted on that basis. If it ever stops being required, this must become a
+ * real column instead.
  */
-function consentFor(
-  title: string,
+function accepted(
+  key: AgreementKey,
   reg: { injuryWaiver: boolean; noRefundAck: boolean; mediaConsent: boolean },
-): boolean | null {
-  const t = title.toLowerCase()
-  if (t.includes('injury') || t.includes('liability') || t.includes('waiver')) return reg.injuryWaiver
-  if (t.includes('refund')) return reg.noRefundAck
-  if (t.includes('media') || t.includes('photo')) return reg.mediaConsent
-  return null
+): boolean {
+  switch (key) {
+    case 'injuryWaiver':  return reg.injuryWaiver
+    case 'noRefundAck':   return reg.noRefundAck
+    case 'mediaConsent':  return reg.mediaConsent
+    case 'sessionWindow': return true
+  }
 }
 
 /** Only for registrations taken before packages became staff-editable. Anything
@@ -177,20 +181,20 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
         </div>
 
         {/* ── Agreements ──
-             Driven by the same contractSections the /register page shows and the
-             registration editor edits. These used to be three hardcoded rows,
-             which silently dropped every other term — including the session
-             window in Program Commitment — and meant edits in the editor never
-             reached the printed contract. */}
+             Exactly the four checkboxes the parent ticked on /register, in the
+             same order and wording, both sides reading lib/agreements.ts. The
+             contract must show what was signed and nothing else — it previously
+             printed three hardcoded rows, then briefly the six editable
+             contractSections, neither of which matched the form. */}
         <div className="mb-8">
           <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Agreements</p>
           <div className="space-y-3">
-            {config.contractSections.map(section => (
+            {AGREEMENT_ORDER.map(key => (
               <AgreementRow
-                key={section.title}
-                agreed={consentFor(section.title, reg)}
-                label={section.title}
-                detail={section.body}
+                key={key}
+                agreed={accepted(key, reg)}
+                label={AGREEMENTS[key].title}
+                detail={AGREEMENTS[key].body}
               />
             ))}
           </div>
@@ -238,17 +242,13 @@ function InvoiceField({ label, value }: { label: string; value: string }) {
   )
 }
 
-/** `agreed === null` means the section is a term of the agreement rather than
- *  something the parent ticked — printed with a neutral marker, not a red ✕. */
-function AgreementRow({ agreed, label, detail }: { agreed: boolean | null; label: string; detail: string }) {
+function AgreementRow({ agreed, label, detail }: { agreed: boolean; label: string; detail: string }) {
   return (
     <div className="flex gap-3 text-sm agreement-row">
       <span className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded flex items-center justify-center text-xs font-bold ${
-        agreed === null ? 'bg-gray-100 text-gray-400'
-          : agreed ? 'bg-gray-900 text-white'
-          : 'bg-red-100 text-red-600'
+        agreed ? 'bg-gray-900 text-white' : 'bg-red-100 text-red-600'
       }`}>
-        {agreed === null ? '§' : agreed ? '✓' : '✕'}
+        {agreed ? '✓' : '✕'}
       </span>
       <div>
         <p className="font-semibold text-gray-800">{label}</p>
