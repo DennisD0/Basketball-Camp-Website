@@ -25,7 +25,7 @@ function ContractPreviewPanel({ id, onClose }: { id: string; onClose: () => void
         <span className="text-sm font-semibold text-gray-200">Contract Preview</span>
         <div className="flex items-center gap-3">
           <a
-            href={`/registrations/${id}/contract`}
+            href={`/contract/${id}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gray-700 text-gray-200 rounded-lg hover:bg-gray-600 transition-colors"
@@ -50,7 +50,7 @@ function ContractPreviewPanel({ id, onClose }: { id: string; onClose: () => void
       <div className="flex-1 overflow-hidden p-4">
         <div className="h-full max-w-4xl mx-auto rounded-xl overflow-hidden shadow-2xl">
           <iframe
-            src={`/registrations/${id}/contract`}
+            src={`/contract/${id}`}
             className="w-full h-full border-0 bg-white"
             title="Contract Preview"
           />

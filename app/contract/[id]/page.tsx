@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import PrintButton from '@/components/registrations/print-button'
 import { PROGRAM_LABELS, PROGRAM_PRICES } from '@/lib/programs'
 import { getRegistrationConfig } from '@/lib/get-registration-config'
@@ -35,6 +36,14 @@ const LEGACY_PACKAGE_LABELS: Record<string, { label: string; sessions: number; w
 }
 
 export default async function ContractPage({ params }: { params: Promise<{ id: string }> }) {
+  // This route deliberately sits outside the (dashboard) group so the contract
+  // renders on its own — inside the group it inherited the sidebar, and the
+  // preview iframe showed a working miniature of the whole app. That also means
+  // it no longer inherits the layout's auth check, and the page carries a
+  // parent's name, email and phone, so guard it here as well as in middleware.
+  const cookieStore = await cookies()
+  if (!cookieStore.has('auth')) redirect('/login')
+
   const { id } = await params
   const [reg, { config }] = await Promise.all([
     prisma.registration.findUnique({ where: { id } }),
@@ -71,16 +80,13 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
     <>
       <style>{`
         @media print {
-          /* Hide all dashboard chrome */
-          nav, .no-print { display: none !important; }
+          /* The on-screen toolbar is the only thing that must not print — the
+             dashboard sidebar is no longer in this tree at all. */
+          .no-print { display: none !important; }
 
           /* White page, no margin bleed */
           *, body, html { background: white !important; }
           body { margin: 0 !important; }
-
-          /* Strip the dashboard layout wrapper constraints */
-          .min-h-screen { background: white !important; min-height: unset !important; }
-          main { max-width: none !important; padding: 0 !important; margin: 0 !important; }
 
           /* Contract content fills the page */
           .contract-body { max-width: none !important; padding: 0 !important; }
