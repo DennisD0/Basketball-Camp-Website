@@ -18,7 +18,7 @@ type Expense = {
 }
 type Props = {
   payments: Payment[]; expenses: Expense[]
-  revenue: number; totalExpenses: number; netProfit: number
+  revenue: number
   unpaidCount: number; paidCount: number
 }
 
@@ -31,13 +31,35 @@ const REVENUE_PERIODS = [
 ] as const
 type RevenuePeriod = typeof REVENUE_PERIODS[number]['key']
 
-function sumRevenueForPeriod(payments: Payment[], period: RevenuePeriod) {
+// Net Profit offers the same three windows plus All, because this card is the
+// page's headline number and "what have we made, ever" has to stay reachable.
+const PROFIT_PERIODS = [
+  { key: 'week', label: 'Week' },
+  { key: 'month', label: 'Month' },
+  { key: '3months', label: '3 Mo' },
+  { key: 'all', label: 'All' },
+] as const
+type ProfitPeriod = typeof PROFIT_PERIODS[number]['key']
+
+/** Start of a rolling window, or null for "no cutoff — count everything". */
+function periodCutoff(period: RevenuePeriod | ProfitPeriod): Date | null {
+  if (period === 'all') return null
   const now = new Date()
   const cutoff = new Date()
   if (period === 'week') cutoff.setDate(now.getDate() - 7)
   else if (period === 'month') cutoff.setMonth(now.getMonth() - 1)
   else cutoff.setMonth(now.getMonth() - 3)
-  return payments.filter(p => asLocalDate(p.date) >= cutoff).reduce((s, p) => s + p.amount, 0)
+  return cutoff
+}
+
+/**
+ * Total the rows dated on or after `cutoff`. Payments and expenses are summed
+ * by the identical rule on purpose — a net profit whose two halves were
+ * windowed differently would be a number that describes nothing.
+ */
+function sumInPeriod(rows: { amount: number; date: string }[], cutoff: Date | null) {
+  const inWindow = cutoff ? rows.filter(r => asLocalDate(r.date) >= cutoff) : rows
+  return inWindow.reduce((s, r) => s + r.amount, 0)
 }
 const METHOD_COLORS = ['#2C6E6A', '#2D3875']
 const CAT_COLORS: Record<string, string> = {
@@ -148,9 +170,10 @@ const EXPENSE_CATS = [
 ]
 
 export default function FinanceDashboard({
-  payments, expenses, revenue, totalExpenses, netProfit, unpaidCount, paidCount,
+  payments, expenses, revenue, unpaidCount, paidCount,
 }: Props) {
-  const [profitPeriod, setProfitPeriod] = useState('8W')
+  const [profitPeriod, setProfitPeriod] = useState('8W')      // weekly chart below
+  const [profitScope, setProfitScope] = useState<ProfitPeriod>('all')  // Net Profit card
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriod>('month')
   const [txSearch, setTxSearch] = useState('')
   const [expSearch, setExpSearch] = useState('')
@@ -168,7 +191,7 @@ export default function FinanceDashboard({
 
   const sparkline    = useMemo(() => buildSparkline(payments), [payments])
   const weeklyData   = useMemo(() => buildWeeklyProfitData(payments, localExpenses, PERIOD_WEEKS[profitPeriod]), [payments, localExpenses, profitPeriod])
-  const periodRevenue = useMemo(() => sumRevenueForPeriod(payments, revenuePeriod), [payments, revenuePeriod])
+  const periodRevenue = useMemo(() => sumInPeriod(payments, periodCutoff(revenuePeriod)), [payments, revenuePeriod])
   const methodData   = useMemo(() => [
     { name: 'Cash',          value: payments.filter(p => p.method === 'CASH').reduce((s, p) => s + p.amount, 0) },
     { name: 'Bank Transfer', value: payments.filter(p => p.method === 'BANK_TRANSFER').reduce((s, p) => s + p.amount, 0) },
@@ -182,8 +205,22 @@ export default function FinanceDashboard({
     ? localExpenses.filter(e => e.description.toLowerCase().includes(expSearch.toLowerCase()) || e.category.toLowerCase().includes(expSearch.toLowerCase()))
     : localExpenses
 
-  const profitPositive = netProfit >= 0
+  // All-time expenses, for the mini stat card only.
   const localExpTotal = localExpenses.reduce((s, e) => s + e.amount, 0)
+
+  // Net profit is DERIVED from the same `localExpenses` every other expense
+  // figure on this page reads, never passed in from the server. The server's
+  // copy was computed once at render and could not see an expense added since —
+  // adding one used to leave this number frozen while the "Revenue − Expenses"
+  // caption directly beneath it updated, so the card contradicted itself.
+  //
+  // The caption reads these same two scoped values, so it always shows the
+  // subtraction actually being displayed above it, in whichever window is on.
+  const profitCutoff = useMemo(() => periodCutoff(profitScope), [profitScope])
+  const scopedRevenue = useMemo(() => sumInPeriod(payments, profitCutoff), [payments, profitCutoff])
+  const scopedExpenses = useMemo(() => sumInPeriod(localExpenses, profitCutoff), [localExpenses, profitCutoff])
+  const netProfit = scopedRevenue - scopedExpenses
+  const profitPositive = netProfit >= 0
 
   function resetExpForm() {
     setExpForm({ description: '', category: EXPENSE_CATS[0].value, amount: '', date: '' })
@@ -266,15 +303,30 @@ export default function FinanceDashboard({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Net Profit */}
         <div className="sm:col-span-2 bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Net Profit</p>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Net Profit</p>
+            <div className="flex gap-1 bg-gray-100 p-0.5 rounded-lg">
+              {PROFIT_PERIODS.map(p => (
+                <button
+                  key={p.key}
+                  onClick={() => setProfitScope(p.key)}
+                  className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${
+                    profitScope === p.key ? 'bg-white text-brand-navy shadow-sm' : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="flex items-end justify-between gap-4 mt-2">
             <div>
               <p className={`font-condensed font-bold text-4xl leading-none ${profitPositive ? 'text-brand-navy' : 'text-red-500'}`}>
                 {profitPositive ? '' : '−'}${Math.abs(netProfit).toLocaleString()}
               </p>
               <p className="text-xs text-gray-400 mt-2">
-                Revenue <span className="font-semibold text-brand-teal">${revenue.toLocaleString()}</span>
-                {' '}− Expenses <span className="font-semibold text-brand-navy">${localExpTotal.toLocaleString()}</span>
+                Revenue <span className="font-semibold text-brand-teal">${scopedRevenue.toLocaleString()}</span>
+                {' '}− Expenses <span className="font-semibold text-brand-navy">${scopedExpenses.toLocaleString()}</span>
               </p>
             </div>
             <div className="w-28 h-14 flex-shrink-0">

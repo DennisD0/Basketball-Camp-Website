@@ -24,8 +24,10 @@ export default async function FinancesPage() {
   }
 
   const revenue = payments.reduce((sum, p) => sum + Number(p.amount), 0)
-  const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0)
-  const netProfit = revenue - totalExpenses
+  // Expense totals and net profit are deliberately NOT computed here. The
+  // dashboard adds and edits expenses client-side, so a total fixed at render
+  // time goes stale the moment staff save one. It derives both from its own
+  // live expense list instead.
 
   const paidMemberIds = new Set(payments.map(p => p.memberId))
   const unpaidCount = Math.max(0, activeMembers - paidMemberIds.size)
@@ -55,8 +57,6 @@ export default async function FinancesPage() {
       payments={dashPayments}
       expenses={dashExpenses}
       revenue={revenue}
-      totalExpenses={totalExpenses}
-      netProfit={netProfit}
       unpaidCount={unpaidCount}
       paidCount={paidMemberIds.size}
     />
