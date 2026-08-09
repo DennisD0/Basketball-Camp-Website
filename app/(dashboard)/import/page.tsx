@@ -881,7 +881,8 @@ export default function ImportPage() {
 
             {resetPreviewStatus === 'error' && (
               <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-4 text-center">
-                Could not check which records the CSVs can restore. Re-uploading may not bring everything back.
+                Could not check which records the CSVs are unable to restore, so resetting is
+                blocked. Close this and try again in a moment.
               </p>
             )}
 
@@ -955,7 +956,12 @@ export default function ImportPage() {
               </button>
               <button
                 onClick={handleReset}
-                disabled={resetStatus === 'deleting' || resetPreviewStatus === 'loading'}
+                // Blocked while the check is in flight AND when it failed. A failed
+                // check means we cannot say what the CSVs are unable to restore, and
+                // the modal is showing no names and no amounts — the one state where
+                // a reset looks safest and is least understood. Retrying costs
+                // seconds; deleting Michelle's payment is permanent.
+                disabled={resetStatus === 'deleting' || resetPreviewStatus === 'loading' || resetPreviewStatus === 'error'}
                 className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50"
               >
                 {resetStatus === 'deleting' ? 'Deleting…' : 'Yes, delete everything'}
