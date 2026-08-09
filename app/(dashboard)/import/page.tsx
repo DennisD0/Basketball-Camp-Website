@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { asLocalDate } from '@/lib/dates'
 
 // ── Shared utilities ────────────────────────────────────────────
 
@@ -383,10 +384,14 @@ export default function ImportPage() {
   const [showResetModal, setShowResetModal] = useState(false)
   const [resetStatus, setResetStatus] = useState<'idle' | 'deleting' | 'done' | 'error'>('idle')
 
-  // Members no CSV will restore — see GET /api/import/reset-preview.
+  // Members and expenses no CSV will restore — see GET /api/import/reset-preview.
   type ResetPreview = {
     members: { id: string; name: string; attendance: number; payments: number }[]
-    totals: { members: number; attendance: number; payments: number }
+    expenses: { id: string; description: string; amount: number; date: string }[]
+    totals: {
+      members: number; attendance: number; payments: number
+      expenses: number; expenseAmount: number
+    }
   }
   const [resetPreview, setResetPreview] = useState<ResetPreview | null>(null)
   const [resetPreviewStatus, setResetPreviewStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle')
@@ -867,7 +872,7 @@ export default function ImportPage() {
 
             <h2 className="font-condensed font-bold text-xl text-brand-navy text-center mb-1">Reset all data?</h2>
             <p className="text-sm text-gray-500 text-center mb-4">
-              This will permanently delete all <strong>members</strong>, <strong>attendance records</strong>, <strong>sessions</strong>, and <strong>payments</strong>. Registrations are kept. This cannot be undone.
+              This will permanently delete all <strong>members</strong>, <strong>attendance records</strong>, <strong>sessions</strong>, <strong>payments</strong>, <strong>expenses</strong>, and <strong>trial students</strong>. Registrations are kept. This cannot be undone.
             </p>
 
             {resetPreviewStatus === 'loading' && (
@@ -880,28 +885,59 @@ export default function ImportPage() {
               </p>
             )}
 
-            {resetPreviewStatus === 'loaded' && resetPreview && resetPreview.totals.members > 0 && (
-              <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 mb-4">
-                <p className="text-[11px] text-amber-900 leading-relaxed mb-2">
-                  <span className="font-semibold">
-                    {resetPreview.totals.members} {resetPreview.totals.members === 1 ? 'student is' : 'students are'} in
-                    no spreadsheet.
-                  </span>{' '}
-                  They were added by hand or created from a registration, so re-uploading the CSVs
-                  will <strong>not</strong> bring them back — along with {resetPreview.totals.attendance} check-in
-                  {resetPreview.totals.attendance === 1 ? '' : 's'} and {resetPreview.totals.payments} payment
-                  {resetPreview.totals.payments === 1 ? '' : 's'}.
-                </p>
-                <ul className="max-h-28 overflow-y-auto text-[11px] text-amber-800 space-y-0.5">
-                  {resetPreview.members.map(m => (
-                    <li key={m.id} className="flex justify-between gap-2">
-                      <span className="truncate">{m.name}</span>
-                      <span className="shrink-0 tabular-nums text-amber-700/70">
-                        {m.attendance} check-in{m.attendance === 1 ? '' : 's'} · {m.payments} payment{m.payments === 1 ? '' : 's'}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+            {resetPreviewStatus === 'loaded' && resetPreview &&
+             (resetPreview.totals.members > 0 || resetPreview.totals.expenses > 0) && (
+              <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 mb-4 space-y-3">
+                {resetPreview.totals.members > 0 && (
+                  <div>
+                    <p className="text-[11px] text-amber-900 leading-relaxed mb-2">
+                      <span className="font-semibold">
+                        {resetPreview.totals.members} {resetPreview.totals.members === 1 ? 'student is' : 'students are'} in
+                        no spreadsheet.
+                      </span>{' '}
+                      They were added by hand or created from a registration, so re-uploading the CSVs
+                      will <strong>not</strong> bring them back — along with {resetPreview.totals.attendance} check-in
+                      {resetPreview.totals.attendance === 1 ? '' : 's'} and {resetPreview.totals.payments} payment
+                      {resetPreview.totals.payments === 1 ? '' : 's'}.
+                    </p>
+                    <ul className="max-h-28 overflow-y-auto text-[11px] text-amber-800 space-y-0.5">
+                      {resetPreview.members.map(m => (
+                        <li key={m.id} className="flex justify-between gap-2">
+                          <span className="truncate">{m.name}</span>
+                          <span className="shrink-0 tabular-nums text-amber-700/70">
+                            {m.attendance} check-in{m.attendance === 1 ? '' : 's'} · {m.payments} payment{m.payments === 1 ? '' : 's'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Expenses typed into the Finances page carry no importKey, so
+                    the Expenses CSV cannot recreate them either. Same warning,
+                    same box — staff read one amber block, not two. */}
+                {resetPreview.totals.expenses > 0 && (
+                  <div className={resetPreview.totals.members > 0 ? 'pt-3 border-t border-amber-200' : ''}>
+                    <p className="text-[11px] text-amber-900 leading-relaxed mb-2">
+                      <span className="font-semibold">
+                        {resetPreview.totals.expenses} {resetPreview.totals.expenses === 1 ? 'expense was' : 'expenses were'} typed
+                        in by hand, totalling ${resetPreview.totals.expenseAmount.toLocaleString()}.
+                      </span>{' '}
+                      {resetPreview.totals.expenses === 1 ? 'It came' : 'They came'} from no sheet, so re-uploading
+                      the Expenses CSV will <strong>not</strong> bring {resetPreview.totals.expenses === 1 ? 'it' : 'them'} back.
+                    </p>
+                    <ul className="max-h-28 overflow-y-auto text-[11px] text-amber-800 space-y-0.5">
+                      {resetPreview.expenses.map(e => (
+                        <li key={e.id} className="flex justify-between gap-2">
+                          <span className="truncate">{e.description}</span>
+                          <span className="shrink-0 tabular-nums text-amber-700/70">
+                            ${e.amount.toFixed(2)} · {asLocalDate(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
 
