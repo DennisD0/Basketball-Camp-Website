@@ -27,7 +27,9 @@ const PERIOD_WEEKS: Record<string, number> = { '4W': 4, '8W': 8, '3M': 12, '6M':
 const REVENUE_PERIODS = [
   { key: 'week', label: 'Week' },
   { key: 'month', label: 'Month' },
-  { key: '3months', label: 'Past 3 Months' },
+  // "Past 3 Months" wrapped to two lines inside a 1/3-width column on a 320px
+  // phone. Same wording as the Net Profit card, which sits beside it.
+  { key: '3months', label: '3 Mo' },
 ] as const
 type RevenuePeriod = typeof REVENUE_PERIODS[number]['key']
 
@@ -134,6 +136,41 @@ function MiniSparkline({ data }: { data: { label: string; amount: number }[] }) 
         <Line type="monotone" dataKey="amount" stroke="#2C6E6A" strokeWidth={2} dot={false} />
       </LineChart>
     </ResponsiveContainer>
+  )
+}
+
+/**
+ * The period selector shared by the Revenue and Net Profit cards.
+ *
+ * One component so the two cards cannot drift apart, and so the touch target
+ * is fixed in one place. Inline on desktop, exactly as before; on a phone it
+ * becomes a full-width row of equal columns with a real 40px hit area, because
+ * the desktop chip is about 22px tall and too small to hit reliably with a
+ * thumb. Column count comes through `style` — Tailwind cannot generate a class
+ * name built at runtime, so `grid-cols-${n}` would silently produce nothing.
+ */
+function PeriodTabs<T extends string>({ options, value, onChange }: {
+  options: readonly { key: T; label: string }[]
+  value: T
+  onChange: (key: T) => void
+}) {
+  return (
+    <div
+      className="grid w-full sm:w-auto sm:flex gap-1 bg-gray-100 p-0.5 rounded-lg"
+      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+    >
+      {options.map(o => (
+        <button
+          key={o.key}
+          onClick={() => onChange(o.key)}
+          className={`min-h-[40px] sm:min-h-0 px-2 sm:py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${
+            value === o.key ? 'bg-white text-brand-navy shadow-sm' : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -303,24 +340,14 @@ export default function FinanceDashboard({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Net Profit */}
         <div className="sm:col-span-2 bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Net Profit</p>
-            <div className="flex gap-1 bg-gray-100 p-0.5 rounded-lg">
-              {PROFIT_PERIODS.map(p => (
-                <button
-                  key={p.key}
-                  onClick={() => setProfitScope(p.key)}
-                  className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${
-                    profitScope === p.key ? 'bg-white text-brand-navy shadow-sm' : 'text-gray-400 hover:text-gray-600'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+            <PeriodTabs options={PROFIT_PERIODS} value={profitScope} onChange={setProfitScope} />
           </div>
           <div className="flex items-end justify-between gap-4 mt-2">
-            <div>
+            {/* min-w-0 lets the caption wrap instead of pushing the sparkline
+                off the card once the figures reach five digits on a phone. */}
+            <div className="min-w-0">
               <p className={`font-condensed font-bold text-4xl leading-none ${profitPositive ? 'text-brand-navy' : 'text-red-500'}`}>
                 {profitPositive ? '' : '−'}${Math.abs(netProfit).toLocaleString()}
               </p>
@@ -338,21 +365,9 @@ export default function FinanceDashboard({
         {/* Revenue (period-selectable) + members */}
         <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5 flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Revenue</p>
-              <div className="flex gap-1 bg-gray-100 p-0.5 rounded-lg">
-                {REVENUE_PERIODS.map(p => (
-                  <button
-                    key={p.key}
-                    onClick={() => setRevenuePeriod(p.key)}
-                    className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${
-                      revenuePeriod === p.key ? 'bg-white text-brand-navy shadow-sm' : 'text-gray-400 hover:text-gray-600'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
+              <PeriodTabs options={REVENUE_PERIODS} value={revenuePeriod} onChange={setRevenuePeriod} />
             </div>
             <p className="font-condensed font-bold text-3xl text-brand-navy leading-none mt-2">${periodRevenue.toLocaleString()}</p>
           </div>
