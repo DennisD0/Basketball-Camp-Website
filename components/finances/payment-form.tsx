@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { SPORTS, SPORT_LABELS, guessSportFromTeam } from '@/lib/sports'
 
 type Member = { id: string; firstName: string; lastName: string; teamAssignment: string | null }
 
@@ -15,7 +16,19 @@ export default function PaymentForm({ members }: { members: Member[] }) {
     method: 'CASH',
     date: new Date().toISOString().split('T')[0],
     notes: '',
+    sport: '',
   })
+  // True when the sport below was filled in from the member's class label
+  // rather than chosen. Shown, not hidden: a student can be enrolled in both
+  // sports, so the guess is a starting point staff confirm.
+  const [sportGuessed, setSportGuessed] = useState(false)
+
+  function selectMember(memberId: string) {
+    const member = members.find(m => m.id === memberId)
+    const guess = guessSportFromTeam(member?.teamAssignment)
+    setSportGuessed(Boolean(guess))
+    setForm(f => ({ ...f, memberId, sport: guess ?? '' }))
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -51,7 +64,7 @@ export default function PaymentForm({ members }: { members: Member[] }) {
           <select
             required
             value={form.memberId}
-            onChange={e => setForm(f => ({ ...f, memberId: e.target.value }))}
+            onChange={e => selectMember(e.target.value)}
             className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-teal/40 bg-white"
           >
             <option value="">Select member…</option>
@@ -61,6 +74,39 @@ export default function PaymentForm({ members }: { members: Member[] }) {
               </option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Sport</label>
+          <div className="grid grid-cols-2 gap-2">
+            {SPORTS.map(s => {
+              const selected = form.sport === s
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => { setSportGuessed(false); setForm(f => ({ ...f, sport: s })) }}
+                  className={`min-h-[40px] px-3 py-2 rounded-xl text-sm font-medium border transition-all ${
+                    selected
+                      ? 'bg-brand-teal text-white border-brand-teal'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {SPORT_LABELS[s]}
+                </button>
+              )
+            })}
+          </div>
+          {sportGuessed && (
+            <p className="mt-1.5 text-xs text-gray-500">
+              Filled in from this member&apos;s class. Change it if this payment was for the other sport.
+            </p>
+          )}
+          {!form.sport && form.memberId && (
+            <p className="mt-1.5 text-xs text-brand-orange">
+              Pick a sport — this payment can&apos;t be counted towards either program without one.
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -115,7 +161,7 @@ export default function PaymentForm({ members }: { members: Member[] }) {
         <div className="flex gap-3 pt-1">
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !form.sport}
             className="flex-1 bg-brand-teal text-white px-5 py-2.5 rounded-full text-sm font-medium hover:bg-brand-teal/90 transition-all disabled:opacity-60"
           >
             {loading ? 'Saving…' : 'Record Payment'}

@@ -8,19 +8,33 @@ import {
 } from 'recharts'
 import DeletePaymentButton from './delete-payment-button'
 import { asLocalDate } from '@/lib/dates'
+import {
+  EXPENSE_SPORTS, SPORTS, SPORT_LABELS, UNASSIGNED_LABEL, sportColor, sportLabel,
+} from '@/lib/sports'
 
 type Payment = {
   id: string; amount: number; method: string; date: string
   memberId: string; memberName: string; teamAssignment: string | null; notes: string | null
+  sport: string | null
 }
 type Expense = {
-  id: string; amount: number; description: string; category: string; date: string; paidBy: string | null
+  id: string; amount: number; description: string; category: string; date: string
+  paidBy: string | null; sport: string | null
 }
 type Props = {
   payments: Payment[]; expenses: Expense[]
-  revenue: number
   unpaidCount: number; paidCount: number
 }
+
+// The club runs both sports out of one set of books. Selecting one scopes every
+// money figure on the page; costs that serve both are never split into a sport,
+// they are reported on their own line.
+const SPORT_SCOPES = [
+  { key: 'all', label: 'All' },
+  { key: 'basketball', label: 'Basketball' },
+  { key: 'volleyball', label: 'Volleyball' },
+] as const
+type SportScope = typeof SPORT_SCOPES[number]['key']
 
 const PERIOD_WEEKS: Record<string, number> = { '4W': 4, '8W': 8, '3M': 12, '6M': 26, '1Y': 52 }
 
@@ -62,6 +76,17 @@ function periodCutoff(period: RevenuePeriod | ProfitPeriod): Date | null {
 function sumInPeriod(rows: { amount: number; date: string }[], cutoff: Date | null) {
   const inWindow = cutoff ? rows.filter(r => asLocalDate(r.date) >= cutoff) : rows
   return inWindow.reduce((s, r) => s + r.amount, 0)
+}
+
+/**
+ * Money for display. Plain `toLocaleString()` renders 6428.5 as "6,428.5" —
+ * one decimal place reads as a bug on a finance page. Whole amounts stay clean
+ * (most are), anything with cents gets both digits.
+ */
+function money(n: number): string {
+  return Number.isInteger(n)
+    ? n.toLocaleString()
+    : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 const METHOD_COLORS = ['#2C6E6A', '#2D3875']
 const CAT_COLORS: Record<string, string> = {
@@ -207,7 +232,7 @@ const EXPENSE_CATS = [
 ]
 
 export default function FinanceDashboard({
-  payments, expenses, revenue, unpaidCount, paidCount,
+  payments, expenses, unpaidCount, paidCount,
 }: Props) {
   const [profitPeriod, setProfitPeriod] = useState('8W')      // weekly chart below
   const [profitScope, setProfitScope] = useState<ProfitPeriod>('all')  // Net Profit card
@@ -220,30 +245,82 @@ export default function FinanceDashboard({
   // only difference, and null means add.
   const [showExpForm, setShowExpForm] = useState(false)
   const [editingExpId, setEditingExpId] = useState<string | null>(null)
-  const [expForm, setExpForm] = useState({ description: '', category: EXPENSE_CATS[0].value, amount: '', date: '' })
+  const [expForm, setExpForm] = useState({ description: '', category: EXPENSE_CATS[0].value, amount: '', date: '', sport: '' })
   const [customCategory, setCustomCategory] = useState(false)
   const [expSaving, setExpSaving] = useState(false)
   const [expError, setExpError] = useState('')
   const [localExpenses, setLocalExpenses] = useState(expenses)
 
-  const sparkline    = useMemo(() => buildSparkline(payments), [payments])
-  const weeklyData   = useMemo(() => buildWeeklyProfitData(payments, localExpenses, PERIOD_WEEKS[profitPeriod]), [payments, localExpenses, profitPeriod])
-  const periodRevenue = useMemo(() => sumInPeriod(payments, periodCutoff(revenuePeriod)), [payments, revenuePeriod])
+  // ── Sport scoping ──────────────────────────────────────────────────────────
+  // Everything below reads `scopedPayments` / `scopedExpenses`, never the raw
+  // props, so one filter decides the whole page and no card can disagree with
+  // another about which sport it is describing.
+  //
+  // Under a sport, expenses narrow to that sport ALONE — `shared` and untagged
+  // rows are deliberately excluded rather than apportioned, and reported
+  // separately below. Splitting a gym bill 50/50 would put a number on the page
+  // that nobody entered and no receipt supports.
+  const [sportScope, setSportScope] = useState<SportScope>('all')
+  const scopedPayments = useMemo(
+    () => (sportScope === 'all' ? payments : payments.filter(p => p.sport === sportScope)),
+    [payments, sportScope],
+  )
+  // Under a sport this is that sport's OWN costs PLUS the full shared gym cost —
+  // the same gym is charged again, in full, to the other sport. Chosen by the
+  // user: the question is "could this program carry the gym on its own", not
+  // "how do we divide the bill". Both sports therefore go negative, and the two
+  // deliberately do not sum to the club total.
+  //
+  // One list, used by every expense figure on the page — the headline, the mini
+  // cards, the weekly chart and the Expenses tab all read it. Charging shared
+  // costs in the headline while a mini card below showed only direct costs is
+  // exactly the self-contradicting card this page has been bitten by before.
+  // Shared rows keep their own badge in the list, so which is which stays plain.
+  const scopedExpenses = useMemo(
+    () => (sportScope === 'all'
+      ? localExpenses
+      : localExpenses.filter(e => e.sport === sportScope || e.sport === 'shared')),
+    [localExpenses, sportScope],
+  )
+
+  const sparkline    = useMemo(() => buildSparkline(scopedPayments), [scopedPayments])
+  const weeklyData   = useMemo(() => buildWeeklyProfitData(scopedPayments, scopedExpenses, PERIOD_WEEKS[profitPeriod]), [scopedPayments, scopedExpenses, profitPeriod])
+  const periodRevenue = useMemo(() => sumInPeriod(scopedPayments, periodCutoff(revenuePeriod)), [scopedPayments, revenuePeriod])
   const methodData   = useMemo(() => [
-    { name: 'Cash',          value: payments.filter(p => p.method === 'CASH').reduce((s, p) => s + p.amount, 0) },
-    { name: 'Bank Transfer', value: payments.filter(p => p.method === 'BANK_TRANSFER').reduce((s, p) => s + p.amount, 0) },
-  ].filter(d => d.value > 0), [payments])
+    { name: 'Cash',          value: scopedPayments.filter(p => p.method === 'CASH').reduce((s, p) => s + p.amount, 0) },
+    { name: 'Bank Transfer', value: scopedPayments.filter(p => p.method === 'BANK_TRANSFER').reduce((s, p) => s + p.amount, 0) },
+  ].filter(d => d.value > 0), [scopedPayments])
 
   const filteredPayments = txSearch.trim()
-    ? payments.filter(p => p.memberName.toLowerCase().includes(txSearch.toLowerCase()) || (p.notes ?? '').toLowerCase().includes(txSearch.toLowerCase()))
-    : payments
+    ? scopedPayments.filter(p => p.memberName.toLowerCase().includes(txSearch.toLowerCase()) || (p.notes ?? '').toLowerCase().includes(txSearch.toLowerCase()))
+    : scopedPayments
 
   const filteredExpenses = expSearch.trim()
-    ? localExpenses.filter(e => e.description.toLowerCase().includes(expSearch.toLowerCase()) || e.category.toLowerCase().includes(expSearch.toLowerCase()))
-    : localExpenses
+    ? scopedExpenses.filter(e => e.description.toLowerCase().includes(expSearch.toLowerCase()) || e.category.toLowerCase().includes(expSearch.toLowerCase()))
+    : scopedExpenses
 
-  // All-time expenses, for the mini stat card only.
-  const localExpTotal = localExpenses.reduce((s, e) => s + e.amount, 0)
+  // All-time totals for the mini stat cards, derived from the scoped lists.
+  // Revenue used to arrive as a server prop; it was removed rather than left
+  // beside a derived local of the same name, the duplicate-that-drifts shape
+  // that froze Net Profit before.
+  const scopedRevenueTotal = scopedPayments.reduce((s, p) => s + p.amount, 0)
+  const localExpTotal = scopedExpenses.reduce((s, e) => s + e.amount, 0)
+
+  // What a sport's own figures deliberately leave out. Only meaningful once a
+  // sport is selected — under All these rows are already counted.
+  const excluded = useMemo(() => {
+    const cutoff = periodCutoff(profitScope)
+    const inWindow = <T extends { date: string }>(rows: T[]) =>
+      cutoff ? rows.filter(r => asLocalDate(r.date) >= cutoff) : rows
+    const total = (rows: { amount: number }[]) => rows.reduce((s, r) => s + r.amount, 0)
+    return {
+      sharedExpenses:     total(inWindow(localExpenses.filter(e => e.sport === 'shared'))),
+      untaggedExpenses:   total(inWindow(localExpenses.filter(e => !e.sport))),
+      untaggedRevenue:    total(inWindow(payments.filter(p => !p.sport))),
+      untaggedExpCount:   inWindow(localExpenses.filter(e => !e.sport)).length,
+      untaggedPayCount:   inWindow(payments.filter(p => !p.sport)).length,
+    }
+  }, [payments, localExpenses, profitScope])
 
   // Net profit is DERIVED from the same `localExpenses` every other expense
   // figure on this page reads, never passed in from the server. The server's
@@ -254,13 +331,24 @@ export default function FinanceDashboard({
   // The caption reads these same two scoped values, so it always shows the
   // subtraction actually being displayed above it, in whichever window is on.
   const profitCutoff = useMemo(() => periodCutoff(profitScope), [profitScope])
-  const scopedRevenue = useMemo(() => sumInPeriod(payments, profitCutoff), [payments, profitCutoff])
-  const scopedExpenses = useMemo(() => sumInPeriod(localExpenses, profitCutoff), [localExpenses, profitCutoff])
-  const netProfit = scopedRevenue - scopedExpenses
+  const scopedRevenue = useMemo(() => sumInPeriod(scopedPayments, profitCutoff), [scopedPayments, profitCutoff])
+  const scopedExpenseTotal = useMemo(() => sumInPeriod(scopedExpenses, profitCutoff), [scopedExpenses, profitCutoff])
+  // `scopedExpenses` already carries the shared gym cost under a sport, so it is
+  // subtracted here exactly once. Do not also subtract `excluded.sharedExpenses`
+  // — that line is for display only and would charge the gym twice over.
+  const netProfit = scopedRevenue - scopedExpenseTotal
   const profitPositive = netProfit >= 0
 
+  // The club-wide figure in the same window — the one that does reconcile, and
+  // counts the gym once. Stays on screen beside a sport's figure rather than
+  // being a tab away.
+  const clubNet = useMemo(
+    () => sumInPeriod(payments, profitCutoff) - sumInPeriod(localExpenses, profitCutoff),
+    [payments, localExpenses, profitCutoff],
+  )
+
   function resetExpForm() {
-    setExpForm({ description: '', category: EXPENSE_CATS[0].value, amount: '', date: '' })
+    setExpForm({ description: '', category: EXPENSE_CATS[0].value, amount: '', date: '', sport: '' })
     setCustomCategory(false)
     setEditingExpId(null)
     setExpError('')
@@ -276,6 +364,9 @@ export default function FinanceDashboard({
       // asLocalDate pins to noon UTC, so the date part round-trips to exactly
       // what the API stored — no off-by-one from the browser's timezone.
       date: asLocalDate(e.date).toISOString().slice(0, 10),
+      // Blank for rows that predate the column, which is what makes editing
+      // one the way it gets tagged.
+      sport: e.sport ?? '',
     })
     setCustomCategory(!EXPENSE_CATS.some(c => c.value === e.category))
     setExpError('')
@@ -336,12 +427,25 @@ export default function FinanceDashboard({
         </div>
       </div>
 
+      {/* Sport scope — governs every money figure below. Rendered through the
+          same PeriodTabs as the card selectors so the touch target and chrome
+          are defined in exactly one place. */}
+      <PeriodTabs options={SPORT_SCOPES} value={sportScope} onChange={setSportScope} />
+
       {/* Primary stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Net Profit */}
         <div className="sm:col-span-2 bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Net Profit</p>
+            {/* The heading carries the caveat, not a footnote. Under a sport this
+                number is revenue minus that sport's OWN costs only — the gym both
+                sports share is not in it — and "Net Profit" alone would read as
+                the whole story. */}
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              {sportScope === 'all'
+                ? 'Net Profit'
+                : `Net Profit · ${SPORT_LABELS[sportScope]} — carrying the full gym rent`}
+            </p>
             <PeriodTabs options={PROFIT_PERIODS} value={profitScope} onChange={setProfitScope} />
           </div>
           <div className="flex items-end justify-between gap-4 mt-2">
@@ -349,12 +453,60 @@ export default function FinanceDashboard({
                 off the card once the figures reach five digits on a phone. */}
             <div className="min-w-0">
               <p className={`font-condensed font-bold text-4xl leading-none ${profitPositive ? 'text-brand-navy' : 'text-red-500'}`}>
-                {profitPositive ? '' : '−'}${Math.abs(netProfit).toLocaleString()}
+                {profitPositive ? '' : '−'}${money(Math.abs(netProfit))}
               </p>
               <p className="text-xs text-gray-400 mt-2">
-                Revenue <span className="font-semibold text-brand-teal">${scopedRevenue.toLocaleString()}</span>
-                {' '}− Expenses <span className="font-semibold text-brand-navy">${scopedExpenses.toLocaleString()}</span>
+                Revenue <span className="font-semibold text-brand-teal">${money(scopedRevenue)}</span>
+                {' '}− Expenses <span className="font-semibold text-brand-navy">${money(scopedExpenseTotal)}</span>
               </p>
+              {sportScope !== 'all' && (
+                <>
+                  {/* The gym line spells out that this same amount is charged to
+                      the other sport too. Without that sentence the two negative
+                      figures look like a bug, and someone will try to add them
+                      together and get a number that means nothing. */}
+                  {excluded.sharedExpenses > 0 && (
+                    <div className="mt-2.5 rounded-lg bg-gray-50 px-2.5 py-2">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-[11px] text-gray-500 leading-snug">
+                          Of which the gym both sports use
+                        </span>
+                        <span className="text-sm font-bold text-brand-navy whitespace-nowrap">
+                          −${money(excluded.sharedExpenses)}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1 leading-snug">
+                        Charged in full to {SPORT_LABELS[sportScope]} and in full to{' '}
+                        {SPORTS.filter(s => s !== sportScope).map(s => SPORT_LABELS[s]).join(' and ')},
+                        so this shows whether the sport could carry the gym on its own.
+                        The two sports deliberately do not add up to the club figure.
+                      </p>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
+                    Club-wide, counting the gym once:{' '}
+                    <span className={`font-semibold ${clubNet >= 0 ? 'text-brand-teal' : 'text-red-500'}`}>
+                      {clubNet >= 0 ? '' : '−'}${money(Math.abs(clubNet))}
+                    </span>
+                    {excluded.untaggedRevenue > 0 && (
+                      <> · {UNASSIGNED_LABEL} revenue <span className="font-semibold">${money(excluded.untaggedRevenue)}</span> sits in neither sport.</>
+                    )}
+                  </p>
+                  {/* Untagged COSTS get their own amber block rather than a grey
+                      aside. A sport whose expenses are all still unassigned shows
+                      its revenue as though it were profit — the number is not
+                      wrong, it is incomplete, and that has to be impossible to
+                      miss. Same amber treatment as the reset warning. */}
+                  {excluded.untaggedExpenses > 0 && (
+                    <p className="mt-2 text-[11px] leading-relaxed rounded-lg bg-amber-50 text-amber-800 px-2.5 py-2">
+                      <span className="font-bold">${money(excluded.untaggedExpenses)}</span> of costs
+                      {' '}({excluded.untaggedExpCount} {excluded.untaggedExpCount === 1 ? 'expense' : 'expenses'})
+                      {' '}have no sport yet, so they are counted against neither. This figure is higher than the
+                      real {SPORT_LABELS[sportScope].toLowerCase()} profit until they are tagged on the Expenses tab.
+                    </p>
+                  )}
+                </>
+              )}
             </div>
             <div className="w-28 h-14 flex-shrink-0">
               <MiniSparkline data={sparkline} />
@@ -369,7 +521,7 @@ export default function FinanceDashboard({
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Revenue</p>
               <PeriodTabs options={REVENUE_PERIODS} value={revenuePeriod} onChange={setRevenuePeriod} />
             </div>
-            <p className="font-condensed font-bold text-3xl text-brand-navy leading-none mt-2">${periodRevenue.toLocaleString()}</p>
+            <p className="font-condensed font-bold text-3xl text-brand-navy leading-none mt-2">${money(periodRevenue)}</p>
           </div>
           <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
             <div>
@@ -387,9 +539,9 @@ export default function FinanceDashboard({
       {/* Secondary mini stat cards */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Total Revenue', value: `$${revenue.toLocaleString()}`, sub: 'all-time payments in' },
-          { label: 'Total Expenses', value: `$${localExpTotal.toLocaleString()}`, sub: 'all-time costs out' },
-          { label: 'Total Transactions', value: String(payments.length), sub: 'payment records' },
+          { label: 'Total Revenue', value: `$${money(scopedRevenueTotal)}`, sub: 'all-time payments in' },
+          { label: 'Total Expenses', value: `$${money(localExpTotal)}`, sub: 'all-time costs out' },
+          { label: 'Total Transactions', value: String(scopedPayments.length), sub: 'payment records' },
         ].map(c => (
           <div key={c.label} className="bg-white rounded-2xl p-4 shadow-sm ring-1 ring-black/5">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{c.label}</p>
@@ -436,7 +588,7 @@ export default function FinanceDashboard({
               <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
               <Tooltip
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                formatter={((v: unknown, name: unknown) => [`$${Number(v).toLocaleString()}`, typeof name === 'string' ? name.charAt(0).toUpperCase() + name.slice(1) : '']) as never}
+                formatter={((v: unknown, name: unknown) => [`$${money(Number(v))}`, typeof name === 'string' ? name.charAt(0).toUpperCase() + name.slice(1) : '']) as never}
                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', fontSize: '12px' }}
                 cursor={{ fill: '#f9fafb' }}
               />
@@ -463,7 +615,10 @@ export default function FinanceDashboard({
                   : 'text-gray-400 hover:text-gray-600'
               }`}
             >
-              {tab === 'payments' ? `Payments (${payments.length})` : `Expenses (${localExpenses.length})`}
+              {/* Scoped counts, not raw ones — a tab reading "Payments (52)"
+                  above a list of 19 volleyball rows is the same contradiction
+                  as a headline that disagrees with its own caption. */}
+              {tab === 'payments' ? `Payments (${scopedPayments.length})` : `Expenses (${scopedExpenses.length})`}
             </button>
           ))}
         </div>
@@ -615,12 +770,38 @@ export default function FinanceDashboard({
                       <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Date *</label>
                       <input required type="date" value={expForm.date} onChange={e => setExpForm(f => ({ ...f, date: e.target.value }))} className={inputCls} />
                     </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Sport *</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {EXPENSE_SPORTS.map(s => {
+                          const selected = expForm.sport === s
+                          return (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => setExpForm(f => ({ ...f, sport: s }))}
+                              className={`min-h-[44px] px-3 rounded-xl text-xs font-bold uppercase tracking-wide transition-all ${
+                                selected
+                                  ? 'bg-brand-navy text-white shadow-sm'
+                                  : 'bg-gray-50 text-gray-500 ring-1 ring-black/10 hover:bg-gray-100'
+                              }`}
+                            >
+                              {SPORT_LABELS[s]}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <p className="mt-1.5 text-[11px] text-gray-400">
+                        Pick <span className="font-semibold">Shared</span> for costs that serve both, like insurance or the website.
+                        Shared costs are reported on their own and never split into a sport.
+                      </p>
+                    </div>
                   </div>
                   {expError && <p className="text-sm text-red-500 bg-red-50 rounded-lg px-3 py-2">{expError}</p>}
                   <div className="flex gap-2 pt-1">
                     <button type="button" onClick={resetExpForm}
                       className="flex-1 min-h-[40px] rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all">Cancel</button>
-                    <button type="submit" disabled={expSaving}
+                    <button type="submit" disabled={expSaving || !expForm.sport}
                       className="flex-1 min-h-[40px] rounded-xl bg-brand-teal text-white text-sm font-semibold hover:bg-brand-teal/90 disabled:opacity-50 transition-all">
                       {expSaving ? 'Saving…' : editingExpId ? 'Save Changes' : 'Save Expense'}
                     </button>
@@ -643,9 +824,13 @@ export default function FinanceDashboard({
               )}
             </div>
 
-            {localExpenses.length === 0 ? (
+            {scopedExpenses.length === 0 ? (
               <div className="px-6 py-12 text-center">
-                <p className="text-sm text-gray-400 mb-2">No expenses recorded yet.</p>
+                <p className="text-sm text-gray-400 mb-2">
+                  {sportScope === 'all'
+                    ? 'No expenses recorded yet.'
+                    : `Nothing charged to ${SPORT_LABELS[sportScope].toLowerCase()} yet. Untagged costs are not shown here.`}
+                </p>
                 <button onClick={() => setShowExpForm(true)} className="text-brand-teal text-sm font-semibold hover:underline">Add the first one →</button>
               </div>
             ) : filteredExpenses.length === 0 ? (
@@ -660,6 +845,12 @@ export default function FinanceDashboard({
                         <p className="font-semibold text-sm text-gray-900 truncate">{e.description}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 uppercase tracking-wide">{e.category}</span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${e.sport ? 'text-white' : 'bg-amber-100 text-amber-700'}`}
+                            style={e.sport ? { backgroundColor: sportColor(e.sport) } : undefined}
+                          >
+                            {sportLabel(e.sport)}
+                          </span>
                           <span className="text-[10px] text-gray-400">{asLocalDate(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</span>
                         </div>
                       </div>
@@ -680,7 +871,7 @@ export default function FinanceDashboard({
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-100">
-                        {['Description', 'Category', 'Amount', 'Date', ''].map(h => (
+                        {['Description', 'Category', 'Sport', 'Amount', 'Date', ''].map(h => (
                           <th key={h} className="px-5 py-3 text-left font-semibold text-gray-400 text-xs uppercase tracking-wide">{h}</th>
                         ))}
                       </tr>
@@ -694,6 +885,22 @@ export default function FinanceDashboard({
                               <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: CAT_COLORS[e.category] ?? '#6b7280' }} />
                               {e.category}
                             </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            {e.sport ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold text-white" style={{ backgroundColor: sportColor(e.sport) }}>
+                                {sportLabel(e.sport)}
+                              </span>
+                            ) : (
+                              // Amber, not grey: an untagged cost is missing from
+                              // both sports' profit and should look like work to do.
+                              <button
+                                onClick={() => startEditExpense(e)}
+                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                              >
+                                {UNASSIGNED_LABEL}
+                              </button>
+                            )}
                           </td>
                           <td className="px-5 py-3.5 font-bold text-brand-orange">${e.amount.toFixed(2)}</td>
                           <td className="px-5 py-3.5 text-gray-500 text-xs">{asLocalDate(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
@@ -724,13 +931,13 @@ export default function FinanceDashboard({
                   <Pie data={methodData} cx="50%" cy="50%" innerRadius={45} outerRadius={68} dataKey="value" paddingAngle={3} strokeWidth={0}>
                     {methodData.map((_, i) => <Cell key={i} fill={METHOD_COLORS[i % METHOD_COLORS.length]} />)}
                   </Pie>
-                  <Tooltip formatter={(v: unknown) => [`$${Number(v).toLocaleString()}`]} contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', fontSize: '12px' }} />
+                  <Tooltip formatter={(v: unknown) => [`$${money(Number(v))}`]} contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', fontSize: '12px' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
             <div className="flex-1 space-y-3 w-full">
               {methodData.map((d, i) => {
-                const pct = Math.round((d.value / revenue) * 100)
+                const pct = scopedRevenueTotal > 0 ? Math.round((d.value / scopedRevenueTotal) * 100) : 0
                 return (
                   <div key={d.name}>
                     <div className="flex items-center justify-between mb-1">
@@ -738,7 +945,7 @@ export default function FinanceDashboard({
                         <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: METHOD_COLORS[i % METHOD_COLORS.length] }} />
                         <span className="text-sm text-gray-600">{d.name}</span>
                       </div>
-                      <span className="text-sm font-semibold text-gray-800">${d.value.toLocaleString()} <span className="text-gray-400 font-normal text-xs">({pct}%)</span></span>
+                      <span className="text-sm font-semibold text-gray-800">${money(d.value)} <span className="text-gray-400 font-normal text-xs">({pct}%)</span></span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-1.5">
                       <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: METHOD_COLORS[i % METHOD_COLORS.length] }} />

@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
 import { resolveMember } from '@/lib/name-match'
 import { withImportKeys } from '@/lib/import-key'
+import { guessSport } from '@/lib/sports'
 
 interface RevenueRow {
   studentName: string
@@ -31,6 +32,10 @@ export async function POST(req: NextRequest) {
     // back into the pool so later rows with a name variant reuse them.
     const pool = (await prisma.member.findMany()).map(m => ({
       id: m.id, firstName: m.firstName, lastName: m.lastName,
+      // Carried so an imported payment can be tagged with a sport. A reset
+      // wipes payments and the client's normal workflow re-uploads the six
+      // sheets, so without this every re-import would silently undo the split.
+      teamAssignment: m.teamAssignment,
     }))
 
     let paymentsCreated = 0
@@ -70,7 +75,7 @@ export async function POST(req: NextRequest) {
             packageType: row.packageType || null,
           },
         })
-        member = { id: created.id, firstName: created.firstName, lastName: created.lastName }
+        member = { id: created.id, firstName: created.firstName, lastName: created.lastName, teamAssignment: created.teamAssignment }
         pool.push(member)
         membersCreated++
         errors.push(`No member matched "${row.studentName}" — created a new one`)
@@ -83,6 +88,11 @@ export async function POST(req: NextRequest) {
             amount: row.amount,
             method: mapMethod(row.paymentMethod),
             date: new Date(row.date),
+            // The sheet's own package label describes this payment; the
+            // member's class only describes the member, and a member can play
+            // both sports. Narrowest source first. Null when neither is clear —
+            // it shows as Unassigned rather than landing in a guessed sport.
+            sport: guessSport(row.packageType, member.teamAssignment),
             importKey: row.importKey,
             notes: [
               row.packageType && `Package: ${row.packageType}`,

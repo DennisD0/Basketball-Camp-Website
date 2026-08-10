@@ -134,6 +134,10 @@ model Payment {
   method    PaymentMethod
   date      DateTime
   notes     String?
+  /// "basketball" | "volleyball". Null = not yet assigned; surfaced as
+  /// Unassigned rather than defaulted, so no revenue lands in a sport nobody
+  /// chose. A student can play both, so this is per payment, not per member.
+  sport     String?
   // Content-derived key so re-uploading the same CSV skips rows already imported.
   importKey String?       @unique @map("import_key")
 
@@ -243,6 +247,10 @@ model Expense {
   amount      Decimal  @db.Decimal(10, 2)
   date        DateTime
   paidBy      String?  @map("paid_by")
+  /// "basketball" | "volleyball" | "shared". Null = not yet assigned. Unlike a
+  /// payment there is nothing to infer this from — an $800 gym rental looks
+  /// identical whichever sport used the floor — so it has to be entered.
+  sport       String?
   importKey   String?  @unique @map("import_key")
   createdAt   DateTime @default(now()) @map("created_at")
 

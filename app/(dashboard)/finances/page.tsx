@@ -17,17 +17,16 @@ export default async function FinancesPage() {
         orderBy: { date: 'desc' },
       }),
       prisma.member.count({ where: { status: 'ACTIVE' } }),
-      prisma.expense.findMany({ select: { id: true, amount: true, description: true, category: true, date: true, paidBy: true }, orderBy: { date: 'desc' } }),
+      prisma.expense.findMany({ select: { id: true, amount: true, description: true, category: true, date: true, paidBy: true, sport: true }, orderBy: { date: 'desc' } }),
     ])
   } catch {
     return <EmptyState message="Could not reach the database. Add your DATABASE_URL in Vercel environment variables and redeploy." />
   }
 
-  const revenue = payments.reduce((sum, p) => sum + Number(p.amount), 0)
-  // Expense totals and net profit are deliberately NOT computed here. The
-  // dashboard adds and edits expenses client-side, so a total fixed at render
-  // time goes stale the moment staff save one. It derives both from its own
-  // live expense list instead.
+  // Revenue, expense totals and net profit are deliberately NOT computed here.
+  // The dashboard adds and edits expenses client-side and scopes every figure
+  // by sport, so any total fixed at render time goes stale the moment staff
+  // save one or switch sport. It derives all of them from its own live lists.
 
   const paidMemberIds = new Set(payments.map(p => p.memberId))
   const unpaidCount = Math.max(0, activeMembers - paidMemberIds.size)
@@ -41,22 +40,23 @@ export default async function FinancesPage() {
     memberName: `${p.member.firstName} ${p.member.lastName}`,
     teamAssignment: p.member.teamAssignment ?? null,
     notes: p.notes ?? null,
+    sport: p.sport ?? null,
   }))
 
-  const dashExpenses = expenses.map((e: { id: string; amount: unknown; description: string; category: string; date: Date; paidBy: string | null }) => ({
+  const dashExpenses = expenses.map((e: { id: string; amount: unknown; description: string; category: string; date: Date; paidBy: string | null; sport: string | null }) => ({
     id: e.id,
     amount: Number(e.amount),
     description: e.description,
     category: e.category,
     date: e.date.toISOString(),
     paidBy: e.paidBy ?? null,
+    sport: e.sport ?? null,
   }))
 
   return (
     <FinanceDashboard
       payments={dashPayments}
       expenses={dashExpenses}
-      revenue={revenue}
       unpaidCount={unpaidCount}
       paidCount={paidMemberIds.size}
     />
