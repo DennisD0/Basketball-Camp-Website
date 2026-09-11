@@ -21,6 +21,9 @@ export const MANUAL_ENTRY_NOTE = 'Created on manual entry'
 /** Stamped on the package opened when staff approve a registration. */
 export const REGISTRATION_NOTE = 'Created on registration approval'
 
+/** Stamped by the bulk session reset. Like a renewal, an import never rewrites it. */
+export const RESET_NOTE = 'Session count reset by staff'
+
 /**
  * Reconcile every member's active package against the Student & Packages sheet,
  * using their check-in history to place the window so the number shown matches
