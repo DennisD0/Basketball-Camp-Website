@@ -4,6 +4,9 @@ import { notFound } from 'next/navigation'
 import TakeAttendance from '@/components/attendance/take-attendance'
 import { avatarColor } from '@/lib/avatar'
 import { summarizeSessions } from '@/lib/sessions'
+import { getRegistrationConfig } from '@/lib/get-registration-config'
+import { scheduledSports } from '@/lib/schedule'
+import { guessSportFromTeam } from '@/lib/sports'
 
 function sessionColor(remaining: number) {
   if (remaining === 0) return { bar: 'bg-red-400', text: 'text-red-500', badge: 'bg-red-50 text-red-600' }
@@ -28,7 +31,7 @@ export default async function AttendanceDatePage({
   const dayEnd = new Date(date + 'T00:00:00Z')
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1)
 
-  const [sessions, activeMembers] = await Promise.all([
+  const [sessions, activeMembers, { config }] = await Promise.all([
     prisma.session.findMany({
       where: { date: { gte: dayStart, lt: dayEnd } },
       include: {
@@ -43,7 +46,19 @@ export default async function AttendanceDatePage({
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
       select: { id: true, firstName: true, lastName: true, teamAssignment: true },
     }),
+    getRegistrationConfig(),
   ])
+
+  // Tuesdays and Fridays are basketball, Saturdays volleyball — read off the
+  // session slots staff maintain on the registration form, not hardcoded here.
+  // A student's sport comes from their class label, the only sport signal a
+  // member row carries; null means unreadable, and those students stay on the
+  // list whatever day it is rather than quietly vanishing from the roster.
+  const todaysSports = scheduledSports(config, date)
+  const rosterMembers = activeMembers.map(m => ({
+    ...m,
+    sport: guessSportFromTeam(m.teamAssignment),
+  }))
 
   // Build attendee list for "view" tab
   const memberMap = new Map<string, typeof sessions[0]['attendance'][0]['member']>()
@@ -124,7 +139,7 @@ export default async function AttendanceDatePage({
       </div>
 
       {activeTab === 'take' ? (
-        <TakeAttendance date={date} members={activeMembers} />
+        <TakeAttendance date={date} members={rosterMembers} scheduledSports={todaysSports} />
       ) : (
         <>
           <p className="text-sm text-gray-400 mb-4">
