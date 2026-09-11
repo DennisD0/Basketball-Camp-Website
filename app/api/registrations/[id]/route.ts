@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
 import { sendComposedEmail } from '@/lib/email'
 import { openNewPackage, REGISTRATION_NOTE } from '@/lib/packages'
-import { resolveProgram } from '@/lib/programs'
+import { resolveProgram, resolveSessionsTotal } from '@/lib/programs'
 import { getRegistrationConfig } from '@/lib/get-registration-config'
 import type { SessionPackage } from '@/lib/registration-config'
 
@@ -54,7 +54,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const lastName = rest.join(' ') || '—'
       const teamAssignment = `${reg.ageGroup} ${reg.sport}`
 
-      const sessionsTotal = reg.packageOption === '5-week' ? 5 : 7
+      // What the parent picked, read from the live config — never guessed from
+      // two legacy package names. See `resolveSessionsTotal`.
+      const { config } = await getRegistrationConfig()
+      const resolvedSessions = resolveSessionsTotal(reg, config.packages)
+      if (resolvedSessions === null) {
+        // No package on file answers this. Credit the smallest package we sell
+        // rather than the largest: a coach topping a student up is a two-tap fix,
+        // sessions given away that were never paid for are not.
+        console.warn('[registrations/patch] unknown package', reg.packageOption, '— defaulting to 5 sessions')
+      }
+      const sessionsTotal = resolvedSessions ?? 5
+      const program = resolveProgram(reg, config.packages)
 
       const member = await prisma.member.create({
         data: {
@@ -74,14 +85,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // Open their first package so check-ins decrement from day one. Without
       // this the member falls back to the legacy columns, which attendance
       // never writes to, and their counter would sit at full forever.
+      // The package label, not the raw `basketball_5_sessions` key — this string
+      // is shown to a coach on the member's sessions card.
       await openNewPackage(member.id, {
         sessionsTotal,
-        packageType: reg.programOption,
+        packageType: program.packageLabel,
         notes: REGISTRATION_NOTE,
       })
 
       if (reg.parentEmail) {
-        const { config } = await getRegistrationConfig()
         await sendComposedEmail({
           to:           reg.parentEmail,
           guardianName: reg.parentName,

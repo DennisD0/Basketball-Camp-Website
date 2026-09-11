@@ -102,3 +102,46 @@ export function resolveProgram(
     description: cfg?.description?.trim() ?? '',
   }
 }
+
+/**
+ * How many sessions a registration actually bought.
+ *
+ * Approval used to read `packageOption === '5-week' ? 5 : 7`, a two-case guess
+ * written when those were the only two packages that existed. Every value the
+ * form sends today — `5_sessions`, `drop_in`, a staff-created
+ * `package_1785855391156` — fell through the `:` and became 7, so a parent who
+ * picked 5 sessions was credited with 7. Same class of bug as the three drifted
+ * label maps above, and the same fix: read the live config first.
+ *
+ * Order is narrowest-source-first, like `guessSport`:
+ *   1. the package the parent actually clicked, from the saved config
+ *   2. the two packages sold before the config existed
+ *   3. the sport-prefixed program key (`basketball_5_sessions`)
+ *   4. a leading number in the value itself (`5_sessions`, `5-week`)
+ *
+ * Returns null when none of those answer — a package staff renamed to something
+ * with no number in it and then deleted from the config. The caller decides what
+ * to do with that rather than being handed a made-up number.
+ */
+export function resolveSessionsTotal(
+  reg: { packageOption: string; programOption: string },
+  packages: SessionPackage[],
+): number | null {
+  const cfg = packages.find(p => p.value === reg.packageOption)
+  if (cfg && Number.isInteger(cfg.sessions) && cfg.sessions > 0) return cfg.sessions
+
+  const legacy = LEGACY_PACKAGES[reg.packageOption]
+  if (legacy) return legacy.sessions
+
+  const byProgram = PROGRAM_SESSIONS[reg.programOption]
+  if (byProgram) return byProgram
+
+  // "5_sessions" / "5-week" / "7 sessions" — the count is in the value itself.
+  const digits = reg.packageOption?.match(/^(\d+)\s*[-_ ]/)
+  if (digits) {
+    const n = parseInt(digits[1], 10)
+    if (n >= 1 && n <= 100) return n
+  }
+
+  return null
+}
