@@ -347,6 +347,34 @@ export default function FinanceDashboard({
     [payments, localExpenses, profitCutoff],
   )
 
+  /**
+   * The two programs side by side, in the window the Net Profit card is on.
+   *
+   * The sport tabs answer "how is basketball doing" one sport at a time; this
+   * answers "which sport is carrying the club", which is the question that made
+   * the split worth having and the one a tab can never show. Same arithmetic as
+   * the scoped view — direct costs plus the whole shared gym — so a sport's row
+   * here and its Net Profit card under its own tab are the same number, and the
+   * rows deliberately do not sum to the club total for the same reason.
+   */
+  const sportBreakdown = useMemo(() => {
+    const sharedTotal = sumInPeriod(localExpenses.filter(e => e.sport === 'shared'), profitCutoff)
+    return SPORTS.map(sport => {
+      const revenue = sumInPeriod(payments.filter(p => p.sport === sport), profitCutoff)
+      const direct  = sumInPeriod(localExpenses.filter(e => e.sport === sport), profitCutoff)
+      return {
+        sport,
+        revenue,
+        direct,
+        shared: sharedTotal,
+        net: revenue - direct - sharedTotal,
+        payments: payments.filter(p => p.sport === sport).length,
+      }
+    })
+  }, [payments, localExpenses, profitCutoff])
+
+  const breakdownMax = Math.max(1, ...sportBreakdown.map(b => b.revenue))
+
   function resetExpForm() {
     setExpForm({ description: '', category: EXPENSE_CATS[0].value, amount: '', date: '', sport: '' })
     setCustomCategory(false)
@@ -535,6 +563,89 @@ export default function FinanceDashboard({
           </div>
         </div>
       </div>
+
+      {/* Basketball v volleyball, side by side. Only under All — inside a sport
+          the page is already that sport, and repeating the other one there
+          would just be the tab bar again. */}
+      {sportScope === 'all' && (
+        <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5">
+          <div className="flex items-baseline justify-between gap-3 mb-1">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">By sport</p>
+            <p className="text-[11px] text-gray-400">
+              {PROFIT_PERIODS.find(p => p.key === profitScope)?.label === 'All'
+                ? 'All time'
+                : `Past ${PROFIT_PERIODS.find(p => p.key === profitScope)?.label.toLowerCase()}`}
+              {' '}· follows the Net Profit window
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+            {sportBreakdown.map(b => (
+              <button
+                key={b.sport}
+                type="button"
+                onClick={() => setSportScope(b.sport)}
+                className="text-left rounded-xl border border-gray-100 p-4 hover:border-gray-200 hover:bg-gray-50/60 transition-all active:scale-[0.99]"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: sportColor(b.sport) }} />
+                  <span className="text-sm font-semibold text-gray-800">{SPORT_LABELS[b.sport]}</span>
+                  <span className="text-[11px] text-gray-400">
+                    {b.payments} payment{b.payments === 1 ? '' : 's'}
+                  </span>
+                </div>
+
+                <p className="font-condensed font-bold text-2xl text-brand-teal leading-none mt-2">
+                  ${money(b.revenue)}
+                  <span className="text-[11px] font-sans font-normal text-gray-400 ml-1.5">revenue</span>
+                </p>
+                <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
+                  <div
+                    className="h-1.5 rounded-full"
+                    style={{ width: `${Math.round((b.revenue / breakdownMax) * 100)}%`, background: sportColor(b.sport) }}
+                  />
+                </div>
+
+                <dl className="mt-3 space-y-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <dt className="text-[11px] text-gray-400">Own costs</dt>
+                    <dd className="text-xs font-semibold text-gray-700">−${money(b.direct)}</dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <dt className="text-[11px] text-gray-400">Shared gym</dt>
+                    <dd className="text-xs font-semibold text-gray-700">−${money(b.shared)}</dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2 pt-1 border-t border-gray-100">
+                    <dt className="text-[11px] font-semibold text-gray-500">Net</dt>
+                    <dd className={`text-sm font-bold ${b.net >= 0 ? 'text-brand-navy' : 'text-red-500'}`}>
+                      {b.net >= 0 ? '' : '−'}${money(Math.abs(b.net))}
+                    </dd>
+                  </div>
+                </dl>
+              </button>
+            ))}
+          </div>
+
+          {/* The gym is charged whole to each sport, so the two nets cannot be
+              added together. Saying so here is cheaper than someone adding them. */}
+          <p className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+            The shared gym is charged in full to both sports — this asks whether each program could
+            carry it alone, so the two nets do not add up to the club&apos;s
+            {' '}<span className={`font-semibold ${clubNet >= 0 ? 'text-brand-teal' : 'text-red-500'}`}>
+              {clubNet >= 0 ? '' : '−'}${money(Math.abs(clubNet))}
+            </span>, which counts it once.
+            {(excluded.untaggedRevenue > 0 || excluded.untaggedExpenses > 0) && (
+              <>
+                {' '}{UNASSIGNED_LABEL} rows sit in neither sport:
+                {excluded.untaggedRevenue > 0 && <> <span className="font-semibold">${money(excluded.untaggedRevenue)}</span> in</>}
+                {excluded.untaggedRevenue > 0 && excluded.untaggedExpenses > 0 && ','}
+                {excluded.untaggedExpenses > 0 && <> <span className="font-semibold">${money(excluded.untaggedExpenses)}</span> out</>}
+                . Tag them on the Expenses tab to see them here.
+              </>
+            )}
+          </p>
+        </div>
+      )}
 
       {/* Secondary mini stat cards */}
       <div className="grid grid-cols-3 gap-3">
