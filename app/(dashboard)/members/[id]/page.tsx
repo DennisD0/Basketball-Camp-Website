@@ -5,7 +5,7 @@ import ArchiveMemberButton from '@/components/members/archive-member-button'
 import EmailParentButton from '@/components/members/email-parent-button'
 import NewPackageButton from '@/components/members/new-package-button'
 import { asLocalDate } from '@/lib/dates'
-import { summarizeSessions } from '@/lib/sessions'
+import { summarizeSessions, daysUntil } from '@/lib/sessions'
 
 const AVATAR_COLORS = [
   'from-brand-navy to-brand-teal', 'from-purple-600 to-indigo-500',
@@ -15,6 +15,38 @@ function avatarGrad(name: string) {
   let h = 0
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10)
+}
+
+function fullDate(d: Date): string {
+  return asLocalDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+/**
+ * How the use-by date reads in plain words. A date on its own makes a coach do
+ * the subtraction; "12 days left" is the part they act on.
+ */
+function deadlineNote(expiresOn: Date | null, remaining: number) {
+  if (!expiresOn) return null
+  const days = daysUntil(expiresOn)
+  if (days < 0) {
+    return {
+      expired: true,
+      soon: false,
+      label: remaining > 0
+        ? `Window closed ${-days} day${days === -1 ? '' : 's'} ago with ${remaining} session${remaining === 1 ? '' : 's'} unused.`
+        : `Window closed ${-days} day${days === -1 ? '' : 's'} ago.`,
+    }
+  }
+  if (days === 0) return { expired: false, soon: true, label: 'Last day to use these sessions.' }
+  return {
+    expired: false,
+    soon: days <= 14,
+    label: `${days} day${days === 1 ? '' : 's'} left to use ${remaining > 0 ? `${remaining} remaining session${remaining === 1 ? '' : 's'}` : 'this package'}.`,
+  }
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -56,6 +88,7 @@ export default async function MemberDetailPage({
   const activePackage = packages.find(p => p.endDate === null) ?? null
   const sessions = summarizeSessions(member, activePackage, allAttendance.map(a => a.session.date))
   const { used: sessionsUsed, remaining: sessionsRemaining, pct: sessionsPct, allTime: attendedCount } = sessions
+  const deadline = deadlineNote(sessions.expiresOn, sessionsRemaining)
 
   const sessionStatus = sessionsRemaining === 0
     ? { color: 'text-red-500', bar: 'bg-red-400', bg: 'bg-red-50', msg: 'All sessions used — renewal needed.', msgColor: 'text-red-500' }
@@ -157,11 +190,36 @@ export default async function MemberDetailPage({
             {sessionsUsed} used this package · {attendedCount} all-time check-in{attendedCount !== 1 ? 's' : ''}
           </p>
           {sessions.startDate && (
-            <p className="text-[11px] text-gray-400 mt-0.5">
-              {sessions.packageType ? `${sessions.packageType} · ` : ''}
-              started {asLocalDate(sessions.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-              {packages.length > 1 ? ` · package #${packages.length}` : ''}
-            </p>
+            <div className="mt-3 pt-3 border-t border-black/5">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[11px] text-gray-500">Registered</span>
+                <span className="text-xs font-semibold text-gray-700">{fullDate(member.enrollmentDate)}</span>
+              </div>
+              {/* Only when the two differ: a renewal or a reset starts the
+                  session window later than the day the student joined, and the
+                  deadline below is counted from this date, not from enrolment. */}
+              {!sameDay(member.enrollmentDate, sessions.startDate) && (
+                <div className="flex items-baseline justify-between gap-3 mt-1">
+                  <span className="text-[11px] text-gray-500">Package started</span>
+                  <span className="text-xs font-semibold text-gray-700">{fullDate(sessions.startDate)}</span>
+                </div>
+              )}
+              <div className="flex items-baseline justify-between gap-3 mt-1">
+                <span className="text-[11px] text-gray-500">Use sessions by</span>
+                <span className={`text-xs font-semibold ${deadline?.expired ? 'text-red-500' : 'text-gray-700'}`}>
+                  {sessions.expiresOn ? fullDate(sessions.expiresOn) : 'Single class — no window'}
+                </span>
+              </div>
+              {deadline && (
+                <p className={`text-[11px] mt-1 ${deadline.expired ? 'text-red-500 font-semibold' : deadline.soon ? 'text-orange-500 font-semibold' : 'text-gray-400'}`}>
+                  {deadline.label}
+                </p>
+              )}
+              <p className="text-[10px] text-gray-400 mt-1">
+                {sessions.packageType ? `${sessions.packageType}` : 'Package'}
+                {packages.length > 1 ? ` · package #${packages.length}` : ''}
+              </p>
+            </div>
           )}
           {sessionStatus.msg && (
             <p className={`text-xs font-semibold mt-2 ${sessionStatus.msgColor}`}>{sessionStatus.msg}</p>

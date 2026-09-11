@@ -35,6 +35,50 @@ export type SessionSummary = {
   source: 'package' | 'legacy'
   packageType: string | null
   startDate: Date | null
+  /** Last day the package's sessions can be used. Null when there is no window. */
+  expiresOn: Date | null
+}
+
+/**
+ * How long a package stays valid, in weeks.
+ *
+ * The contract sells the window with the package: "5 sessions — complete within
+ * 7 weeks", "7 sessions — complete within 9 weeks". Both are the session count
+ * plus two weeks of slack, which is what makes this derivable instead of a
+ * fourth place the numbers could drift.
+ *
+ * A one-session package is a drop-in — a day pass, bought and used the same
+ * afternoon. There is no window to run out, so it gets null rather than a
+ * three-week deadline that would eventually expire and read as a warning.
+ */
+export function packageWindowWeeks(sessionsTotal: number): number | null {
+  if (!Number.isFinite(sessionsTotal) || sessionsTotal <= 1) return null
+  return sessionsTotal + 2
+}
+
+/** The date a package's sessions must be used by, or null for a drop-in. */
+export function packageExpiry(startDate: Date, sessionsTotal: number): Date | null {
+  const weeks = packageWindowWeeks(sessionsTotal)
+  if (weeks === null) return null
+  const end = new Date(startDate.getTime())
+  end.setUTCDate(end.getUTCDate() + weeks * 7)
+  return end
+}
+
+/**
+ * Whole days from today until `date`; negative once it has passed.
+ *
+ * Both sides are read in UTC, the timezone package dates are stored in. That
+ * keeps the answer identical on the server and in the browser — a member card
+ * rendered one way during SSR and the other after hydration would flag a React
+ * mismatch — at the cost of being a day out for a viewer reading it late at
+ * night in a western timezone.
+ */
+export function daysUntil(date: Date, from: Date = new Date()): number {
+  const day = 24 * 60 * 60 * 1000
+  const a = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+  const b = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate())
+  return Math.round((a - b) / day)
 }
 
 function pctOf(used: number, total: number): number {
@@ -75,6 +119,7 @@ export function summarizeSessions(
       source: 'package',
       packageType: activePackage.packageType,
       startDate: activePackage.startDate,
+      expiresOn: packageExpiry(activePackage.startDate, total),
     }
   }
 
@@ -89,6 +134,9 @@ export function summarizeSessions(
     source: 'legacy',
     packageType: null,
     startDate: null,
+    // No package row means no start date, and a deadline counted from a date we
+    // do not have would be fiction.
+    expiresOn: null,
   }
 }
 

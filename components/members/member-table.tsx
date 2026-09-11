@@ -4,6 +4,23 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Member } from '@prisma/client'
+import { asLocalDate } from '@/lib/dates'
+import { daysUntil } from '@/lib/sessions'
+
+/** A member's package figures, serialized by the server page. */
+export type MemberSessions = {
+  total: number
+  used: number
+  remaining: number
+  /** ISO — the day the package started, i.e. when their registration runs from. */
+  startDate: string | null
+  /** ISO — the day the sessions must be used by. Null for a drop-in. */
+  expiresOn: string | null
+}
+
+function shortDate(iso: string): string {
+  return asLocalDate(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
 
 const AVATAR_GRADS = [
   'from-brand-navy to-brand-teal',
@@ -38,13 +55,49 @@ function SearchIcon() {
   )
 }
 
+/**
+ * Sessions left, when the package started and when it runs out.
+ *
+ * The dates are the point: a coach looking at the roster needs to see that a
+ * student has three sessions left AND nine days to use them, without opening
+ * the profile. Expiry is derived in lib/sessions.ts from the package total —
+ * 5 sessions run 7 weeks, 7 run 9 — so it is never stored twice.
+ */
+function SessionLine({ s }: { s: MemberSessions }) {
+  const days = s.expiresOn ? daysUntil(new Date(s.expiresOn)) : null
+  const expired = days !== null && days < 0
+  const soon = days !== null && days >= 0 && days <= 14
+
+  return (
+    <p className="text-[11px] mt-1 truncate">
+      <span className={`font-semibold ${
+        s.remaining === 0 ? 'text-red-500' : s.remaining <= 2 ? 'text-orange-500' : 'text-brand-teal'
+      }`}>
+        {s.remaining}/{s.total} left
+      </span>
+      {s.startDate && (
+        <span className="text-gray-400"> · from {shortDate(s.startDate)}</span>
+      )}
+      {s.expiresOn ? (
+        <span className={expired ? 'text-red-500 font-semibold' : soon ? 'text-orange-500 font-semibold' : 'text-gray-400'}>
+          {expired ? ` · ended ${shortDate(s.expiresOn)}` : ` · use by ${shortDate(s.expiresOn)}`}
+        </span>
+      ) : (
+        s.total <= 1 && <span className="text-gray-400"> · drop-in</span>
+      )}
+    </p>
+  )
+}
+
 function MemberCard({
   m,
   paid,
+  sessions,
   onDeleteClick,
 }: {
   m: Member
   paid: boolean
+  sessions?: MemberSessions
   onDeleteClick: () => void
 }) {
   const router = useRouter()
@@ -78,6 +131,7 @@ function MemberCard({
             {paid ? 'Paid' : 'Unpaid'}
           </span>
         </div>
+        {sessions && <SessionLine s={sessions} />}
         {m.guardianName && (
           <p className="text-[11px] text-gray-400 mt-1 truncate">{m.guardianName}</p>
         )}
@@ -106,7 +160,16 @@ function MemberCard({
   )
 }
 
-export default function MemberTable({ members, paidMemberIds = [] }: { members: Member[]; paidMemberIds?: string[] }) {
+export default function MemberTable({
+  members,
+  paidMemberIds = [],
+  sessions = {},
+}: {
+  members: Member[]
+  paidMemberIds?: string[]
+  /** Keyed by member id. Absent for a member whose figures could not be read. */
+  sessions?: Record<string, MemberSessions>
+}) {
   const paidSet = new Set(paidMemberIds)
   const teams = ['All', ...Array.from(new Set(members.map(m => m.teamAssignment).filter(Boolean) as string[])).sort()]
   const [activeTab, setActiveTab] = useState('All')
@@ -222,6 +285,7 @@ export default function MemberTable({ members, paidMemberIds = [] }: { members: 
                 key={m.id}
                 m={m}
                 paid={paidSet.has(m.id)}
+                sessions={sessions[m.id]}
                 onDeleteClick={() => { setPendingDelete({ id: m.id, name: `${m.firstName} ${m.lastName}` }); setDeleteStatus('idle') }}
               />
             ))}
