@@ -119,9 +119,14 @@ export async function POST(req: NextRequest) {
 
   // Optional: reset only these members, and/or start the new packages on a past
   // date — a term that began two weeks ago should count the check-ins since.
-  const only: Set<string> | null = Array.isArray(body?.memberIds) && body.memberIds.length
-    ? new Set(body.memberIds as string[])
-    : null
+  // An explicit empty list means "nobody", never "everybody" — a modal with every
+  // box unticked must not fall through to a whole-roster reset.
+  if (body?.memberIds !== undefined) {
+    if (!Array.isArray(body.memberIds) || body.memberIds.length === 0 || !body.memberIds.every((id: unknown) => typeof id === 'string')) {
+      return NextResponse.json({ error: 'memberIds must be a non-empty list of member ids' }, { status: 400 })
+    }
+  }
+  const only: Set<string> | null = body?.memberIds ? new Set(body.memberIds as string[]) : null
 
   let startDate = utcToday()
   if (typeof body?.startDate === 'string') {

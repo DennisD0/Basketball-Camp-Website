@@ -39,16 +39,31 @@ export default function ResetSessionsButton() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'saving' | 'error'>('idle')
   const [error, setError] = useState('')
   const [startDate, setStartDate] = useState(todayISO)
+  // Who gets reset. Everyone starts ticked; a student part-way through a real
+  // package (12 of 14 used) can be left out rather than handed free sessions.
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  function toggle(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   async function load() {
     setOpen(true)
     setPreview(null)
+    setSelected(new Set())
     setError('')
     setStatus('loading')
     try {
       const res = await fetch('/api/members/reset-sessions')
       if (!res.ok) { setStatus('error'); setError('Could not read the current session counts.'); return }
-      setPreview(await res.json())
+      const data: Preview = await res.json()
+      setPreview(data)
+      setSelected(new Set(data.rows.map(r => r.memberId)))
       setStatus('ready')
     } catch {
       setStatus('error')
@@ -63,7 +78,7 @@ export default function ResetSessionsButton() {
       const res = await fetch('/api/members/reset-sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ startDate }),
+        body: JSON.stringify({ startDate, memberIds: Array.from(selected) }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => null)
@@ -81,6 +96,11 @@ export default function ResetSessionsButton() {
   }
 
   const busy = status === 'saving'
+  // Summary figures follow the ticked rows, so the sentence matches the button.
+  const chosen = preview?.rows.filter(r => selected.has(r.memberId)) ?? []
+  const usedCleared = chosen.reduce((s, r) => s + r.currentUsed, 0)
+  const totalChanged = chosen.filter(r => r.proposedTotal !== r.currentTotal).length
+  const unmatched = chosen.filter(r => r.source !== 'registration').length
 
   return (
     <>
@@ -116,22 +136,22 @@ export default function ResetSessionsButton() {
                 <>
                   <div className="rounded-2xl bg-[#F4F2EE] p-4 mb-4">
                     <p className="text-sm text-gray-700">
-                      <strong>{preview.totals.members}</strong> member{preview.totals.members === 1 ? '' : 's'} will be reset.
-                      {' '}<strong>{preview.totals.usedCleared}</strong> used-session
-                      {preview.totals.usedCleared === 1 ? '' : 's'} cleared.
+                      <strong>{chosen.length}</strong> of {preview.rows.length} member{preview.rows.length === 1 ? '' : 's'} will be reset.
+                      {' '}<strong>{usedCleared}</strong> used-session{usedCleared === 1 ? '' : 's'} cleared.
                     </p>
-                    {preview.totals.totalChanged > 0 && (
+                    {totalChanged > 0 && (
                       <p className="text-xs text-gray-500 mt-1.5">
-                        {preview.totals.totalChanged} student{preview.totals.totalChanged === 1 ? '' : 's'} also
-                        {' '}get{preview.totals.totalChanged === 1 ? 's' : ''} a corrected session total, taken from
+                        {totalChanged} student{totalChanged === 1 ? '' : 's'} also
+                        {' '}get{totalChanged === 1 ? 's' : ''} a corrected session total, taken from
                         {' '}the package they registered for.
                       </p>
                     )}
-                    <p className="text-xs text-gray-500 mt-1.5">
-                      Counts for {preview.totals.members - preview.totals.fromSheet} student
-                      {preview.totals.members - preview.totals.fromSheet === 1 ? '' : 's'} could not be matched to a
-                      registration, so their current total is kept as-is.
-                    </p>
+                    {unmatched > 0 && (
+                      <p className="text-xs text-gray-500 mt-1.5">
+                        {unmatched} student{unmatched === 1 ? '' : 's'} could not be matched to a
+                        registration, so their current total is kept as-is.
+                      </p>
+                    )}
                   </div>
 
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
@@ -147,12 +167,32 @@ export default function ResetSessionsButton() {
                     Backdate this to the start of the current term if those sessions should already count.
                   </p>
 
+                  {preview.rows.length > 0 && (
+                    <div className="flex gap-3 mb-1 text-xs">
+                      <button type="button" onClick={() => setSelected(new Set(preview.rows.map(r => r.memberId)))} className="text-gray-400 hover:text-brand-teal">
+                        Select all
+                      </button>
+                      <span className="text-gray-200">·</span>
+                      <button type="button" onClick={() => setSelected(new Set())} className="text-gray-400 hover:text-red-500">
+                        Select none
+                      </button>
+                    </div>
+                  )}
+
                   <div className="space-y-1 mb-2">
                     {preview.rows.map(r => {
                       const changed = r.proposedTotal !== r.currentTotal
+                      const on = selected.has(r.memberId)
                       return (
-                        <div key={r.memberId} className="flex items-center justify-between gap-3 py-2 border-b border-gray-50 last:border-0">
-                          <div className="min-w-0">
+                        <label key={r.memberId} className={`flex items-center justify-between gap-3 py-2 border-b border-gray-50 last:border-0 cursor-pointer ${on ? '' : 'opacity-50'}`}>
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={() => toggle(r.memberId)}
+                            disabled={busy}
+                            className="h-5 w-5 flex-shrink-0 accent-brand-teal"
+                          />
+                          <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold text-gray-800 truncate">{r.name}</p>
                             <p className="text-[11px] text-gray-400 truncate">
                               {r.team ?? 'No class'}
@@ -161,12 +201,16 @@ export default function ResetSessionsButton() {
                           </div>
                           <p className="text-xs whitespace-nowrap">
                             <span className="text-gray-400">{r.currentUsed}/{r.currentTotal} used</span>
-                            <span className="text-gray-300 mx-1.5">→</span>
-                            <span className={`font-semibold ${changed ? 'text-brand-orange' : 'text-brand-teal'}`}>
-                              0/{r.proposedTotal}
-                            </span>
+                            {on && (
+                              <>
+                                <span className="text-gray-300 mx-1.5">→</span>
+                                <span className={`font-semibold ${changed ? 'text-brand-orange' : 'text-brand-teal'}`}>
+                                  0/{r.proposedTotal}
+                                </span>
+                              </>
+                            )}
                           </p>
-                        </div>
+                        </label>
                       )
                     })}
                     {preview.rows.length === 0 && (
@@ -191,10 +235,10 @@ export default function ResetSessionsButton() {
               </button>
               <button
                 onClick={apply}
-                disabled={busy || !preview || preview.rows.length === 0}
+                disabled={busy || !preview || chosen.length === 0}
                 className="flex-1 min-h-[48px] rounded-2xl bg-brand-teal text-white text-sm font-semibold hover:bg-brand-teal/90 transition-all active:scale-95 disabled:opacity-50"
               >
-                {busy ? 'Resetting…' : `Reset ${preview?.rows.length ?? ''} member${preview?.rows.length === 1 ? '' : 's'}`}
+                {busy ? 'Resetting…' : `Reset ${chosen.length} member${chosen.length === 1 ? '' : 's'}`}
               </button>
             </div>
           </div>
