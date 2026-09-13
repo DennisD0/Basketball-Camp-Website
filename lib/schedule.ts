@@ -12,7 +12,7 @@
  */
 
 import type { RegistrationConfig } from '@/lib/registration-config'
-import { isSport, type Sport } from '@/lib/sports'
+import { guessSportFromTeam, isSport, type Sport } from '@/lib/sports'
 
 /** Day abbreviations as the slot labels spell them. */
 const DAY_TOKENS: Record<string, number> = {
@@ -73,4 +73,30 @@ export function scheduledSports(config: RegistrationConfig, date: string): Sport
   // offset lands on the previous day, which would read Saturday as Friday.
   const weekday = new Date(date + 'T12:00:00Z').getUTCDay()
   return sportsByWeekday(config).get(weekday) ?? []
+}
+
+/**
+ * A student's sport, read from their class label.
+ *
+ * Registration students carry the sport in the label ("Developing Volleyball").
+ * Students imported from the Student & Packages sheet carry a class *time*
+ * instead ("Friday 5pm", "Saturday 12:00 PM") — nearly half the live roster —
+ * so a sport-name match alone left them on every day's attendance list. For
+ * those, the weekday in the label is looked up on the same schedule the
+ * attendance page uses, so the two can never disagree.
+ *
+ * Null when the label names no sport and no weekday, or a weekday that more
+ * than one sport trains on. Ambiguity is never resolved by picking one.
+ */
+export function sportForClassLabel(config: RegistrationConfig, label: string | null | undefined): Sport | null {
+  const named = guessSportFromTeam(label)
+  if (named) return named
+  if (!label) return null
+
+  const byDay = sportsByWeekday(config)
+  const sports = new Set<Sport>()
+  for (const day of weekdaysIn(label)) {
+    for (const sport of byDay.get(day) ?? []) sports.add(sport)
+  }
+  return sports.size === 1 ? Array.from(sports)[0] : null
 }

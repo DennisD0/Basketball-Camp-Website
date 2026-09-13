@@ -5,8 +5,7 @@ import TakeAttendance from '@/components/attendance/take-attendance'
 import { avatarColor } from '@/lib/avatar'
 import { summarizeSessions } from '@/lib/sessions'
 import { getRegistrationConfig } from '@/lib/get-registration-config'
-import { scheduledSports } from '@/lib/schedule'
-import { guessSportFromTeam } from '@/lib/sports'
+import { scheduledSports, sportForClassLabel } from '@/lib/schedule'
 
 function sessionColor(remaining: number) {
   if (remaining === 0) return { bar: 'bg-red-400', text: 'text-red-500', badge: 'bg-red-50 text-red-600' }
@@ -51,13 +50,13 @@ export default async function AttendanceDatePage({
 
   // Tuesdays and Fridays are basketball, Saturdays volleyball — read off the
   // session slots staff maintain on the registration form, not hardcoded here.
-  // A student's sport comes from their class label, the only sport signal a
-  // member row carries; null means unreadable, and those students stay on the
-  // list whatever day it is rather than quietly vanishing from the roster.
+  // A student's sport comes from their class label — the sport it names, or the
+  // weekday of a sheet-style "Friday 5pm". Null means unreadable, and those
+  // students stay on the list whatever day it is rather than quietly vanishing.
   const todaysSports = scheduledSports(config, date)
   const rosterMembers = activeMembers.map(m => ({
     ...m,
-    sport: guessSportFromTeam(m.teamAssignment),
+    sport: sportForClassLabel(config, m.teamAssignment),
   }))
 
   // Build attendee list for "view" tab
