@@ -43,17 +43,18 @@ export type SessionSummary = {
  * How long a package stays valid, in weeks.
  *
  * The contract sells the window with the package: "5 sessions — complete within
- * 7 weeks", "7 sessions — complete within 9 weeks". Both are the session count
- * plus two weeks of slack, which is what makes this derivable instead of a
- * fourth place the numbers could drift.
+ * 7 weeks", "7 sessions — complete within 9 weeks" (see `lib/agreements.ts`).
+ * Those two are the only windows anyone has agreed to, so they are the only
+ * ones returned. The sheet's 8-, 10- and 14-session packages were never sold
+ * with a deadline, and extrapolating one would put an invented "window closed"
+ * warning on a real student's card.
  *
- * A one-session package is a drop-in — a day pass, bought and used the same
- * afternoon. There is no window to run out, so it gets null rather than a
- * three-week deadline that would eventually expire and read as a warning.
+ * A drop-in is a day pass with no window to run out, so it gets null too.
  */
+const CONTRACT_WINDOW_WEEKS: Record<number, number> = { 5: 7, 7: 9 }
+
 export function packageWindowWeeks(sessionsTotal: number): number | null {
-  if (!Number.isFinite(sessionsTotal) || sessionsTotal <= 1) return null
-  return sessionsTotal + 2
+  return CONTRACT_WINDOW_WEEKS[sessionsTotal] ?? null
 }
 
 /** The date a package's sessions must be used by, or null for a drop-in. */

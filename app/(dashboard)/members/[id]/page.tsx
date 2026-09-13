@@ -207,7 +207,7 @@ export default async function MemberDetailPage({
               <div className="flex items-baseline justify-between gap-3 mt-1">
                 <span className="text-[11px] text-gray-500">Use sessions by</span>
                 <span className={`text-xs font-semibold ${deadline?.expired ? 'text-red-500' : 'text-gray-700'}`}>
-                  {sessions.expiresOn ? fullDate(sessions.expiresOn) : 'Single class — no window'}
+                  {sessions.expiresOn ? fullDate(sessions.expiresOn) : sessions.total <= 1 ? 'Single class — no window' : 'No deadline on file'}
                 </span>
               </div>
               {deadline && (
