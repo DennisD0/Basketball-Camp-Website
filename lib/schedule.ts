@@ -12,7 +12,7 @@
  */
 
 import type { RegistrationConfig } from '@/lib/registration-config'
-import { guessSportFromTeam, isSport, type Sport } from '@/lib/sports'
+import { guessSportFromTeam, isSport, SPORTS, type Sport } from '@/lib/sports'
 
 /** Day abbreviations as the slot labels spell them. */
 const DAY_TOKENS: Record<string, number> = {
@@ -76,27 +76,31 @@ export function scheduledSports(config: RegistrationConfig, date: string): Sport
 }
 
 /**
+ * The sport a class label that names no sport belongs to.
+ *
+ * Only the Student & Packages sheet writes labels like that ("Friday 5pm",
+ * "Saturday 12:00 PM"), and that sheet is the basketball roster: volleyball
+ * students have only ever arrived through the registration form, which writes
+ * the sport into the label. Reading the weekday instead was tried and was
+ * wrong — before volleyball launched, Saturday was a basketball class too, so
+ * "Saturday 12:00 PM" sorted eight basketball students onto the volleyball
+ * roster. Confirmed with the club on 2026-09-14.
+ */
+export const SHEET_LABEL_SPORT: Sport = 'basketball'
+
+/**
  * A student's sport, read from their class label.
  *
- * Registration students carry the sport in the label ("Developing Volleyball").
- * Students imported from the Student & Packages sheet carry a class *time*
- * instead ("Friday 5pm", "Saturday 12:00 PM") — nearly half the live roster —
- * so a sport-name match alone left them on every day's attendance list. For
- * those, the weekday in the label is looked up on the same schedule the
- * attendance page uses, so the two can never disagree.
- *
- * Null when the label names no sport and no weekday, or a weekday that more
- * than one sport trains on. Ambiguity is never resolved by picking one.
+ * A label naming exactly one sport ("Developing Volleyball") says so directly.
+ * Any other non-empty label that names no sport is a sheet class time, see
+ * `SHEET_LABEL_SPORT`. Null for an empty label or one naming both sports —
+ * those students stay on every roster rather than being guessed at.
  */
-export function sportForClassLabel(config: RegistrationConfig, label: string | null | undefined): Sport | null {
+export function sportForClassLabel(label: string | null | undefined): Sport | null {
   const named = guessSportFromTeam(label)
   if (named) return named
-  if (!label) return null
-
-  const byDay = sportsByWeekday(config)
-  const sports = new Set<Sport>()
-  for (const day of weekdaysIn(label)) {
-    for (const sport of byDay.get(day) ?? []) sports.add(sport)
-  }
-  return sports.size === 1 ? Array.from(sports)[0] : null
+  if (!label?.trim()) return null
+  const lower = label.toLowerCase()
+  if (SPORTS.some(s => lower.includes(s))) return null
+  return SHEET_LABEL_SPORT
 }

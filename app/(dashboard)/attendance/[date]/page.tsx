@@ -50,13 +50,13 @@ export default async function AttendanceDatePage({
 
   // Tuesdays and Fridays are basketball, Saturdays volleyball — read off the
   // session slots staff maintain on the registration form, not hardcoded here.
-  // A student's sport comes from their class label — the sport it names, or the
-  // weekday of a sheet-style "Friday 5pm". Null means unreadable, and those
+  // A student's sport comes from their class label — the sport it names, or
+  // basketball for a sheet-style "Friday 5pm". Null means unreadable, and those
   // students stay on the list whatever day it is rather than quietly vanishing.
   const todaysSports = scheduledSports(config, date)
   const rosterMembers = activeMembers.map(m => ({
     ...m,
-    sport: sportForClassLabel(config, m.teamAssignment),
+    sport: sportForClassLabel(m.teamAssignment),
   }))
 
   // Build attendee list for "view" tab
