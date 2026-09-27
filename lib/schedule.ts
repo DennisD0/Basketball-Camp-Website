@@ -105,3 +105,23 @@ export function sportForClassLabel(label: string | null | undefined): Sport | nu
   return SHEET_LABEL_SPORT
 }
 
+
+/**
+ * Is this class label one the Student & Packages sheet wrote?
+ *
+ * The sheet labels a student by when their class ran — "Friday 4pm", "Saturday
+ * 12:00 PM" — while the registration form writes an age range and a sport,
+ * "Ages 5–9 Basketball". Students who arrived through both are on the roster
+ * twice, and it is the sheet copy that is stale.
+ *
+ * Deliberately narrow, because the answer decides what a cleanup offers to
+ * delete: the label must name a weekday AND no sport. A team a coach typed by
+ * hand ("U14 Boys") names neither and is left alone; anything naming a sport is
+ * a registration label whatever else it says.
+ */
+export function isSheetClassLabel(label: string | null | undefined): boolean {
+  if (!label?.trim()) return false
+  const lower = label.toLowerCase()
+  if (SPORTS.some(s => lower.includes(s))) return false
+  return weekdaysIn(label).length > 0
+}

@@ -3,6 +3,7 @@ import MemberTable, { type MemberSessions } from '@/components/members/member-ta
 import Link from 'next/link'
 import { summarizeSessions } from '@/lib/sessions'
 import ResetSessionsButton from '@/components/members/reset-sessions-button'
+import CleanupSheetImportsButton from '@/components/members/cleanup-sheet-imports-button'
 
 export default async function MembersPage() {
   let members: Awaited<ReturnType<typeof prisma.member.findMany>> = []
@@ -63,6 +64,7 @@ export default async function MembersPage() {
           <p className="text-sm text-gray-400 mt-0.5">{members.length} active member{members.length !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          <CleanupSheetImportsButton />
           <ResetSessionsButton />
           <Link
             href="/members/new"
