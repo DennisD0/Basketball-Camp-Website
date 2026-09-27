@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 import { nameKey, resolveMember } from '@/lib/name-match'
+import { LEGACY_CLASS_KEY } from '@/lib/classes'
 
 async function requireAuth() {
   const cookieStore = await cookies()
@@ -140,9 +141,12 @@ async function runImport(request: NextRequest) {
   const sessions = await prisma.$transaction(
     sessionDates.map(date =>
       prisma.session.upsert({
-        where: { date },
+        // The check-in sheet records a date and nothing finer, so imported
+        // history lands on the whole-day session rather than being assigned to
+        // a class it never named. See `lib/classes.ts`.
+        where: { date_classKey: { date, classKey: LEGACY_CLASS_KEY } },
         update: {},
-        create: { type: 'PRACTICE', date },
+        create: { type: 'PRACTICE', date, classKey: LEGACY_CLASS_KEY },
       })
     )
   )

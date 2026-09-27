@@ -26,7 +26,7 @@ const DAY_TOKENS: Record<string, number> = {
 }
 
 /** Every weekday named in a slot label. "Tue & Thu 4–5PM" is two days, not one. */
-function weekdaysIn(slotTime: string): number[] {
+export function weekdaysIn(slotTime: string): number[] {
   const days = new Set<number>()
   for (const word of slotTime.toLowerCase().match(/[a-z]+/g) ?? []) {
     const day = DAY_TOKENS[word]
@@ -104,3 +104,4 @@ export function sportForClassLabel(label: string | null | undefined): Sport | nu
   if (SPORTS.some(s => lower.includes(s))) return null
   return SHEET_LABEL_SPORT
 }
+

@@ -5,7 +5,8 @@ import TakeAttendance from '@/components/attendance/take-attendance'
 import { avatarColor } from '@/lib/avatar'
 import { summarizeSessions } from '@/lib/sessions'
 import { getRegistrationConfig } from '@/lib/get-registration-config'
-import { scheduledSports, sportForClassLabel } from '@/lib/schedule'
+import { sportForClassLabel } from '@/lib/schedule'
+import { classesOnDate, classKeysForLabel, LEGACY_CLASS_KEY } from '@/lib/classes'
 
 function sessionColor(remaining: number) {
   if (remaining === 0) return { bar: 'bg-red-400', text: 'text-red-500', badge: 'bg-red-50 text-red-600' }
@@ -34,11 +35,13 @@ export default async function AttendanceDatePage({
     prisma.session.findMany({
       where: { date: { gte: dayStart, lt: dayEnd } },
       include: {
-        attendance: {
-          where: { status: 'PRESENT' },
-          include: { member: true },
-        },
+        // Every mark, not only the PRESENT ones: the Take tab has to open on
+        // what was already saved for this class. Starting from an empty sheet
+        // is what made a second save wipe the first — nobody was ticked, so
+        // everyone was written back as absent.
+        attendance: { include: { member: true } },
       },
+      orderBy: { classKey: 'asc' },
     }),
     prisma.member.findMany({
       where: { status: 'ACTIVE' },
@@ -48,21 +51,36 @@ export default async function AttendanceDatePage({
     getRegistrationConfig(),
   ])
 
-  // Tuesdays and Fridays are basketball, Saturdays volleyball — read off the
-  // session slots staff maintain on the registration form, not hardcoded here.
-  // A student's sport comes from their class label — the sport it names, or
-  // basketball for a sheet-style "Friday 5pm". Null means unreadable, and those
-  // students stay on the list whatever day it is rather than quietly vanishing.
-  const todaysSports = scheduledSports(config, date)
+  // The classes that run on this date, off the session slots staff maintain on
+  // the registration form — "Basketball · Fri 4–5PM" and "Basketball · Fri
+  // 5–6PM" are two classes, and attendance is taken against one of them, never
+  // against the day. See `lib/classes.ts`.
+  const todaysClasses = classesOnDate(config, date)
+
+  // A student's sport still comes from their class label — the sport it names,
+  // or basketball for a sheet-style "Friday 5pm". Null means unreadable, and
+  // those students stay on every roster rather than quietly vanishing.
   const rosterMembers = activeMembers.map(m => ({
     ...m,
     sport: sportForClassLabel(m.teamAssignment),
+    classKeys: classKeysForLabel(m.teamAssignment, todaysClasses),
   }))
 
-  // Build attendee list for "view" tab
-  const memberMap = new Map<string, typeof sessions[0]['attendance'][0]['member']>()
+  // What is already on the record for each class, so the Take tab opens on it.
+  const savedByClass: Record<string, { present: string[]; recorded: string[] }> = {}
+  for (const session of sessions) {
+    savedByClass[session.classKey] = {
+      present:  session.attendance.filter(a => a.status === 'PRESENT').map(a => a.memberId),
+      recorded: session.attendance.map(a => a.memberId),
+    }
+  }
+
+  // Build attendee list for "view" tab, grouped by the class they checked into.
+  type Attendee = typeof sessions[0]['attendance'][0]['member']
+  const memberMap = new Map<string, Attendee>()
   for (const session of sessions) {
     for (const record of session.attendance) {
+      if (record.status !== 'PRESENT') continue
       if (!memberMap.has(record.memberId)) memberMap.set(record.memberId, record.member)
     }
   }
@@ -86,16 +104,38 @@ export default async function AttendanceDatePage({
   }
   const packageByMember = new Map(activePackages.map(p => [p.memberId, p]))
 
-  const attendees = Array.from(memberMap.values())
-    .map(member => ({
+  const summaryFor = (member: Attendee) =>
+    summarizeSessions(
       member,
-      sessions: summarizeSessions(
-        member,
-        packageByMember.get(member.id) ?? null,
-        datesByMember.get(member.id) ?? [],
-      ),
-    }))
+      packageByMember.get(member.id) ?? null,
+      datesByMember.get(member.id) ?? [],
+    )
+
+  const attendees = Array.from(memberMap.values())
+    .map(member => ({ member, sessions: summaryFor(member) }))
     .sort((a, b) => a.member.firstName.localeCompare(b.member.firstName))
+
+  // The View tab lists each class separately, because "12 students attended on
+  // Friday" is not a number a coach can act on when two different classes ran.
+  // A whole-day row — history from before the split, or a deliberate joint
+  // session — says so rather than borrowing a class name it never had.
+  const classGroups = sessions
+    .map(session => ({
+      key: session.classKey,
+      title:
+        session.classLabel ??
+        todaysClasses.find(c => c.key === session.classKey)?.label ??
+        (session.classKey === LEGACY_CLASS_KEY ? 'Whole day' : session.classKey),
+      subtitle:
+        session.classKey === LEGACY_CLASS_KEY
+          ? 'Recorded across every roster at once'
+          : todaysClasses.find(c => c.key === session.classKey)?.ages ?? null,
+      attendees: session.attendance
+        .filter(a => a.status === 'PRESENT')
+        .map(a => ({ member: a.member, sessions: summaryFor(a.member) }))
+        .sort((a, b) => a.member.firstName.localeCompare(b.member.firstName)),
+    }))
+    .filter(g => g.attendees.length > 0)
 
   const label = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
@@ -138,13 +178,18 @@ export default async function AttendanceDatePage({
       </div>
 
       {activeTab === 'take' ? (
-        <TakeAttendance date={date} members={rosterMembers} scheduledSports={todaysSports} />
+        <TakeAttendance
+          date={date}
+          members={rosterMembers}
+          classes={todaysClasses.map(c => ({ key: c.key, label: c.label, time: c.time, ages: c.ages }))}
+          saved={savedByClass}
+        />
       ) : (
         <>
           <p className="text-sm text-gray-400 mb-4">
             {attendees.length === 0
               ? 'No attendance recorded for this date.'
-              : `${attendees.length} student${attendees.length !== 1 ? 's' : ''} attended`}
+              : `${attendees.length} student${attendees.length !== 1 ? 's' : ''} attended across ${classGroups.length} class${classGroups.length !== 1 ? 'es' : ''}`}
           </p>
 
           {attendees.length === 0 ? (
@@ -161,8 +206,20 @@ export default async function AttendanceDatePage({
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {attendees.map(({ member, sessions }, idx) => {
+            <div className="space-y-6">
+              {classGroups.map(group => (
+                <div key={group.key}>
+                  <div className="flex items-baseline justify-between mb-2 px-1">
+                    <h2 className="font-condensed font-bold text-brand-navy tracking-wide uppercase text-sm">
+                      {group.title}
+                    </h2>
+                    <p className="text-[11px] text-gray-400">
+                      {group.subtitle ? `${group.subtitle} · ` : ''}
+                      {group.attendees.length} present
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+              {group.attendees.map(({ member, sessions }, idx) => {
                 const { used, remaining, pct, total } = sessions
                 const colors = sessionColor(remaining)
                 const initials = `${member.firstName[0] ?? ''}${member.lastName?.[0] ?? ''}`.toUpperCase()
@@ -207,6 +264,9 @@ export default async function AttendanceDatePage({
                   </Link>
                 )
               })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </>

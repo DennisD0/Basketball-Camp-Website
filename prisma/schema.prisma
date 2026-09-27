@@ -95,18 +95,34 @@ model MemberPackage {
   @@map("member_packages")
 }
 
+/// One row per CLASS, not per day. Two classes run on a Friday — 4–5PM for
+/// ages 5–9, 5–6PM for ages 9–12 — and while this was keyed on the date alone
+/// they shared a row: saving the second class re-wrote every student of the
+/// first to ABSENT, because they were not on screen to be ticked. Coaches lost
+/// real check-ins to that, and a student whose only check-in was overwritten
+/// read 7 of 7 sessions remaining. See `lib/classes.ts` for what a class is.
 model Session {
-  id    String      @id @default(cuid())
-  type  SessionType
-  date  DateTime
-  notes String?
+  id         String      @id @default(cuid())
+  type       SessionType
+  date       DateTime
+  /// Which class on that date, e.g. `basketball:fri-4-5pm`. Empty string for a
+  /// whole-day session: one recorded before attendance was split per class, or
+  /// one taken deliberately across every roster at once. Empty rather than null
+  /// so the unique index still rejects a second whole-day row — Postgres treats
+  /// two NULLs as distinct.
+  classKey   String      @default("") @map("class_key")
+  /// What the class was called when it was recorded, e.g. "Basketball · Fri 4–5PM".
+  /// Kept on the row because `classKey` is derived from the slot label staff can
+  /// rename, and renaming must not make last month's history unreadable.
+  classLabel String?     @map("class_label")
+  notes      String?
 
   attendance Attendance[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@unique([date])
+  @@unique([date, classKey])
   @@map("sessions")
 }
 

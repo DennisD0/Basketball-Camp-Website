@@ -12,7 +12,9 @@ export default function AttendanceCalendar({ initialYear, initialMonth }: Props)
   const router = useRouter()
   const [year, setYear] = useState(initialYear)
   const [month, setMonth] = useState(initialMonth)
-  const [sessionDates, setSessionDates] = useState<Set<string>>(new Set())
+  // Classes recorded per day. A Friday can hold two — the 4PM and the 5PM
+  // register are separate sessions — so a count, not just a flag.
+  const [classesByDate, setClassesByDate] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [dbError, setDbError] = useState(false)
 
@@ -22,7 +24,7 @@ export default function AttendanceCalendar({ initialYear, initialMonth }: Props)
     const m = String(month).padStart(2, '0')
     fetch(`/api/attendance?month=${year}-${m}`)
       .then(r => { if (!r.ok) throw new Error('db'); return r.json() })
-      .then(data => { setSessionDates(new Set(data.dates ?? [])); setLoading(false) })
+      .then(data => { setClassesByDate(data.classesByDate ?? {}); setLoading(false) })
       .catch(() => { setDbError(true); setLoading(false) })
   }, [year, month])
 
@@ -50,7 +52,8 @@ export default function AttendanceCalendar({ initialYear, initialMonth }: Props)
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
 
-  const sessionCount = sessionDates.size
+  const dayCount = Object.keys(classesByDate).length
+  const sessionCount = Object.values(classesByDate).reduce((a, b) => a + b, 0)
 
   return (
     <div className="bg-white rounded-2xl shadow-sm ring-1 ring-black/5 overflow-hidden">
@@ -69,7 +72,9 @@ export default function AttendanceCalendar({ initialYear, initialMonth }: Props)
           <h2 className="font-condensed font-bold text-xl text-brand-navy tracking-wide uppercase">{monthName} {year}</h2>
           {!loading && !dbError && (
             <p className="text-xs text-gray-400 mt-0.5">
-              {sessionCount === 0 ? 'No sessions recorded' : `${sessionCount} session${sessionCount !== 1 ? 's' : ''} this month`}
+              {sessionCount === 0
+                ? 'No sessions recorded'
+                : `${sessionCount} class${sessionCount !== 1 ? 'es' : ''} across ${dayCount} day${dayCount !== 1 ? 's' : ''}`}
             </p>
           )}
         </div>
@@ -111,7 +116,8 @@ export default function AttendanceCalendar({ initialYear, initialMonth }: Props)
             {cells.map((day, i) => {
               if (!day) return <div key={i} />
               const ds = dateStr(day)
-              const hasSession = sessionDates.has(ds)
+              const classCount = classesByDate[ds] ?? 0
+              const hasSession = classCount > 0
               const isToday = ds === today
               return (
                 <button
@@ -127,7 +133,11 @@ export default function AttendanceCalendar({ initialYear, initialMonth }: Props)
                 >
                   {day}
                   {hasSession && (
-                    <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white/50" />
+                    <span className="absolute bottom-1 flex gap-0.5">
+                      {Array.from({ length: Math.min(classCount, 3) }).map((_, d) => (
+                        <span key={d} className="w-1 h-1 rounded-full bg-white/60" />
+                      ))}
+                    </span>
                   )}
                 </button>
               )
@@ -140,7 +150,7 @@ export default function AttendanceCalendar({ initialYear, initialMonth }: Props)
       <div className="flex items-center gap-5 px-5 pb-4 border-t border-gray-50 pt-3">
         <span className="flex items-center gap-1.5 text-xs text-gray-400">
           <span className="w-3 h-3 rounded-md bg-brand-teal inline-block" />
-          Session recorded
+          Class recorded
         </span>
         <span className="flex items-center gap-1.5 text-xs text-gray-400">
           <span className="w-3 h-3 rounded-md ring-2 ring-brand-navy inline-block" />

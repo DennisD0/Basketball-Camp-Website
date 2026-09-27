@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { avatarColor } from '@/lib/avatar'
-import { SPORTS, SPORT_LABELS, type Sport } from '@/lib/sports'
+import { ALL_CLASSES_KEY, LEGACY_CLASS_KEY } from '@/lib/classes'
+import type { Sport } from '@/lib/sports'
 
 type Member = {
   id: string
@@ -12,10 +13,24 @@ type Member = {
   teamAssignment: string | null
   /** Read from the class label. Null when it names both sports or neither. */
   sport: Sport | null
+  /** Which of today's classes this student belongs to. See lib/classes.ts. */
+  classKeys: string[]
 }
 
-/** 'all' keeps every student on the list, for a make-up or a joint session. */
-type Filter = Sport | 'all'
+/** A class on the schedule for this date. */
+type ClassOption = { key: string; label: string; time: string; ages: string }
+
+/** What is already saved for a class, so the sheet opens on it. */
+type Saved = { present: string[]; recorded: string[] }
+
+/**
+ * The session row a tab writes to. The "All students" tab keeps the whole-day
+ * row — the empty key — because that is exactly what it records, and what every
+ * session taken before classes existed already sits under.
+ */
+function sessionKeyFor(tab: string): string {
+  return tab === ALL_CLASSES_KEY ? LEGACY_CLASS_KEY : tab
+}
 
 /** "Tuesday" from a yyyy-mm-dd — noon UTC so the day never slips backwards. */
 function weekdayName(date: string): string {
@@ -25,63 +40,101 @@ function weekdayName(date: string): string {
 export default function TakeAttendance({
   date,
   members,
-  scheduledSports = [],
+  classes,
+  saved,
 }: {
   date: string
   members: Member[]
-  /** Sports that train on this weekday, from the registration form's schedule. */
-  scheduledSports?: Sport[]
+  /** Classes that run on this weekday, from the registration form's schedule. */
+  classes: ClassOption[]
+  /** Keyed by class key; the whole-day session lives under the empty string. */
+  saved: Record<string, Saved>
 }) {
   const router = useRouter()
-  const [present, setPresent] = useState<Set<string>>(new Set())
+
+  // Attendance belongs to a class, not to a day. Two classes run on a Friday,
+  // and while they shared one record saving the second wiped the first: nobody
+  // from the 4PM class was ticked on the 5PM screen, so all of them were written
+  // back as absent. Each tab is now its own session row.
+  const [selected, setSelected] = useState<string>(classes[0]?.key ?? ALL_CLASSES_KEY)
+
+  /**
+   * Ticks per class, seeded from what is already on the record.
+   *
+   * Seeding is the other half of the same bug: the sheet used to open empty, so
+   * re-opening a class just to correct one student re-wrote everyone else to
+   * absent. Kept per class so switching tabs mid-session never drops unsaved work.
+   */
+  const [ticks, setTicks] = useState<Record<string, Set<string>>>(() => {
+    const seeded: Record<string, Set<string>> = {}
+    for (const tab of [...classes.map(c => c.key), ALL_CLASSES_KEY]) {
+      const onRecord = saved[sessionKeyFor(tab)]
+      if (onRecord) seeded[tab] = new Set(onRecord.present)
+    }
+    return seeded
+  })
+  const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
-  // One sport on the calendar today: open on that roster. Two sports, or none
-  // (a day with no class on the schedule), and there is nothing to narrow to.
-  const [filter, setFilter] = useState<Filter>(
-    scheduledSports.length === 1 ? scheduledSports[0] : 'all',
-  )
+  const present = ticks[selected] ?? new Set<string>()
+  const isSavedNow = savedKeys.has(selected)
 
-  // A student whose class label does not name a sport is shown on every roster,
-  // flagged. Hiding them would mean a coach silently cannot check in a kid who
-  // is standing in the gym, and the fix — editing the class label — is not
-  // something to discover mid-session.
+  // 'all' keeps every student on the list, for a make-up or a joint session, and
+  // records one whole-day session — which is what the empty class key has always
+  // meant. A student whose label names no sport we can read is on every roster,
+  // flagged: hiding a kid standing in the gym is the one thing a coach cannot
+  // work around mid-session.
   const visible = useMemo(
-    () => (filter === 'all' ? members : members.filter(m => m.sport === filter || m.sport === null)),
-    [members, filter],
+    () => (selected === ALL_CLASSES_KEY ? members : members.filter(m => m.classKeys.includes(selected))),
+    [members, selected],
   )
-  const countFor = (f: Filter) =>
-    f === 'all' ? members.length : members.filter(m => m.sport === f || m.sport === null).length
+  const countFor = (key: string) =>
+    key === ALL_CLASSES_KEY ? members.length : members.filter(m => m.classKeys.includes(key)).length
+
+  function update(fn: (prev: Set<string>) => Set<string>) {
+    setTicks(prev => ({ ...prev, [selected]: fn(prev[selected] ?? new Set()) }))
+    setSavedKeys(prev => {
+      const next = new Set(prev)
+      next.delete(selected)
+      return next
+    })
+  }
 
   function toggle(id: string) {
-    setPresent(prev => {
+    update(prev => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
-    setSaved(false)
   }
 
   async function save() {
     setSaving(true)
     setError('')
-    // Only the students on screen are recorded — an absence is a claim that the
-    // student was expected, and a volleyball player is not absent from a
-    // basketball practice. Anyone ticked before the filter changed is kept, so a
-    // check-in can never be dropped by switching rosters.
+
+    const selectedClass = classes.find(c => c.key === selected)
+    // Only the students on this class's roster are recorded — an absence is a
+    // claim that the student was expected, and a 5PM student is not absent from
+    // the 4PM class. Anyone ticked anyway is kept, so a check-in a coach made
+    // deliberately is never dropped.
     const presentIds = Array.from(present)
     const allMemberIds = Array.from(new Set([...visible.map(m => m.id), ...presentIds]))
 
     const res = await fetch('/api/attendance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, presentIds, allMemberIds }),
+      body: JSON.stringify({
+        date,
+        classKey: sessionKeyFor(selected),
+        classLabel: selectedClass?.label ?? null,
+        presentIds,
+        allMemberIds,
+      }),
     })
     setSaving(false)
     if (res.ok) {
-      setSaved(true)
+      setSavedKeys(prev => new Set([...prev, selected]))
       // Refresh server data so View tab reflects the save
       router.refresh()
     } else {
@@ -90,6 +143,13 @@ export default function TakeAttendance({
   }
 
   const presentCount = visible.filter(m => present.has(m.id)).length
+  const selectedClass = classes.find(c => c.key === selected)
+  const alreadyOnRecord = (saved[sessionKeyFor(selected)]?.recorded.length ?? 0) > 0
+
+  const tabs: ClassOption[] = [
+    ...classes,
+    { key: ALL_CLASSES_KEY, label: 'All students', time: '', ages: '' },
+  ]
 
   return (
     <div className="space-y-4">
@@ -104,44 +164,47 @@ export default function TakeAttendance({
             onClick={save}
             disabled={saving}
             className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${
-              saved
+              isSavedNow
                 ? 'bg-green-50 text-green-700'
                 : 'bg-brand-navy text-white hover:bg-brand-navy/90 active:scale-95'
             } disabled:opacity-50`}
           >
-            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Attendance'}
+            {saving ? 'Saving…' : isSavedNow ? '✓ Saved' : 'Save Attendance'}
           </button>
         </div>
       </div>
 
-      {/* Roster scope — basketball on Tue/Fri, volleyball on Sat, per the
-          schedule on the registration form. Switchable for make-up sessions. */}
+      {/* Which class. Each one is saved on its own, so taking the 5PM register
+          cannot touch what the 4PM register already recorded. */}
       <div className="space-y-1.5">
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
-          {([...SPORTS, 'all'] as Filter[]).map(f => (
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto scrollbar-none">
+          {tabs.map(c => (
             <button
-              key={f}
+              key={c.key}
               type="button"
-              onClick={() => setFilter(f)}
-              className={`flex-1 min-h-[40px] text-xs font-semibold rounded-lg transition-all ${
-                filter === f ? 'bg-white text-brand-navy shadow-sm' : 'text-gray-400 hover:text-gray-600'
+              onClick={() => setSelected(c.key)}
+              className={`flex-1 min-w-[112px] min-h-[44px] px-2 text-xs font-semibold rounded-lg transition-all ${
+                selected === c.key ? 'bg-white text-brand-navy shadow-sm' : 'text-gray-400 hover:text-gray-600'
               }`}
             >
-              {f === 'all' ? 'All students' : SPORT_LABELS[f]}
-              <span className={`ml-1.5 ${filter === f ? 'text-gray-400' : 'text-gray-300'}`}>{countFor(f)}</span>
+              <span className="block truncate">{c.key === ALL_CLASSES_KEY ? c.label : c.time}</span>
+              <span className={`block text-[10px] font-normal truncate ${selected === c.key ? 'text-gray-400' : 'text-gray-300'}`}>
+                {c.key === ALL_CLASSES_KEY ? `${countFor(c.key)} students` : `${c.ages} · ${countFor(c.key)}`}
+              </span>
             </button>
           ))}
         </div>
         <p className="text-[11px] text-gray-400">
-          {scheduledSports.length === 1
-            ? `${weekdayName(date)} is ${SPORT_LABELS[scheduledSports[0]].toLowerCase()} — ${
-                filter === scheduledSports[0]
-                  ? 'other students are hidden.'
-                  : 'showing a different roster than the schedule.'
-              }`
-            : scheduledSports.length > 1
-            ? `${weekdayName(date)} has ${scheduledSports.map(sp => SPORT_LABELS[sp].toLowerCase()).join(' and ')} on the schedule.`
-            : `No class is scheduled on a ${weekdayName(date)}, so everyone is listed.`}
+          {selected === ALL_CLASSES_KEY ? (
+            classes.length === 0
+              ? `No class is scheduled on a ${weekdayName(date)}, so everyone is listed and this saves as one session for the whole day.`
+              : 'Everyone is listed. This saves as one session for the whole day, not against a class.'
+          ) : (
+            <>
+              Taking the register for <span className="font-semibold text-gray-500">{selectedClass?.label}</span>
+              {alreadyOnRecord ? ' — already recorded, showing what was saved.' : ' only. Other classes today are unaffected.'}
+            </>
+          )}
         </p>
       </div>
 
@@ -149,7 +212,7 @@ export default function TakeAttendance({
       <div className="flex gap-2">
         <button
           type="button"
-          onClick={() => { setPresent(new Set(visible.map(m => m.id))); setSaved(false) }}
+          onClick={() => update(() => new Set(visible.map(m => m.id)))}
           className="text-xs text-gray-400 hover:text-brand-teal transition-colors"
         >
           Mark all present
@@ -157,7 +220,7 @@ export default function TakeAttendance({
         <span className="text-gray-200">·</span>
         <button
           type="button"
-          onClick={() => { setPresent(prev => new Set([...prev].filter(id => !visible.some(m => m.id === id)))); setSaved(false) }}
+          onClick={() => update(prev => new Set([...prev].filter(id => !visible.some(m => m.id === id))))}
           className="text-xs text-gray-400 hover:text-red-500 transition-colors"
         >
           Clear all
@@ -170,6 +233,9 @@ export default function TakeAttendance({
           const isPresent = present.has(m.id)
           const initials = `${m.firstName[0] ?? ''}${m.lastName?.[0] ?? ''}`.toUpperCase()
           const bg = avatarColor(m.firstName + m.lastName)
+          // Their label did not say which of today's classes they are in, so
+          // they are on more than one roster rather than missing from the right one.
+          const unplaced = selected !== ALL_CLASSES_KEY && m.classKeys.length > 1
 
           return (
             <button
@@ -196,9 +262,14 @@ export default function TakeAttendance({
                   {m.teamAssignment && (
                     <p className="text-xs text-gray-400">{m.teamAssignment}</p>
                   )}
-                  {m.sport === null && filter !== 'all' && (
+                  {m.sport === null && (
                     <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full">
                       sport not set
+                    </span>
+                  )}
+                  {unplaced && m.sport !== null && (
+                    <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full">
+                      class not set
                     </span>
                   )}
                 </div>
@@ -219,7 +290,7 @@ export default function TakeAttendance({
         <p className="text-sm text-gray-400 text-center py-8">
           {members.length === 0
             ? 'No active members found.'
-            : `No ${filter === 'all' ? '' : SPORT_LABELS[filter as Sport].toLowerCase() + ' '}students on the roster. Switch to All students to see everyone.`}
+            : `No students are on the ${selectedClass?.label ?? 'this'} roster. Switch to All students to see everyone.`}
         </p>
       )}
     </div>
