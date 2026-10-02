@@ -66,3 +66,75 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
+
+/**
+ * Move the active package's start date.
+ *
+ * A student's package does not always begin the day the paperwork does. Parents
+ * pay late and owe a class from before they registered; a coach enters a student
+ * a fortnight after their first session. The check-ins are real and they belong
+ * to the package that was bought — they just fall outside the window as first
+ * recorded, so they are charged to nothing.
+ *
+ * Opening a NEW package backdated would do it, but that is the wrong shape: it
+ * leaves a student who has bought one package looking like they have bought two,
+ * and the renewal it implies never happened. Correcting the date of the package
+ * they are on says what actually occurred.
+ *
+ * Attendance is never touched. The window moves, and which check-ins fall inside
+ * it follows from that — the same derivation every other page reads.
+ */
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const cookieStore = await cookies()
+  if (!cookieStore.has('auth')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+  const body = await req.json().catch(() => null)
+
+  if (typeof body?.startDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.startDate)) {
+    return NextResponse.json({ error: 'startDate must be yyyy-mm-dd' }, { status: 400 })
+  }
+  const startDate = new Date(body.startDate + 'T00:00:00Z')
+  if (Number.isNaN(startDate.getTime())) {
+    return NextResponse.json({ error: 'startDate is not a real date' }, { status: 400 })
+  }
+
+  const packages = await prisma.memberPackage.findMany({
+    where: { memberId: id },
+    orderBy: { startDate: 'desc' },
+  })
+  const active = packages.find(p => p.endDate === null)
+  if (!active) {
+    return NextResponse.json(
+      { error: 'This student has no active package to move. Start one first.' },
+      { status: 404 },
+    )
+  }
+
+  // The package this one replaced was closed ON the active package's start date.
+  // Moving the start without moving that close date would leave a gap no package
+  // covers, or an overlap where two do — and a check-in in either would be
+  // counted wrongly. Keep the chain contiguous.
+  const predecessor = packages.find(
+    p => p.id !== active.id && p.endDate !== null && p.endDate.getTime() === active.startDate.getTime(),
+  )
+  if (predecessor && startDate.getTime() <= predecessor.startDate.getTime()) {
+    return NextResponse.json(
+      { error: 'That is on or before the previous package started. Pick a later date.' },
+      { status: 400 },
+    )
+  }
+
+  try {
+    await prisma.$transaction(async tx => {
+      await tx.memberPackage.update({ where: { id: active.id }, data: { startDate } })
+      if (predecessor) {
+        await tx.memberPackage.update({ where: { id: predecessor.id }, data: { endDate: startDate } })
+      }
+    })
+    return NextResponse.json({ ok: true, startDate: body.startDate })
+  } catch (err) {
+    console.error('[members/packages/patch]', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}

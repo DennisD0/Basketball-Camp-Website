@@ -4,8 +4,9 @@ import Link from 'next/link'
 import ArchiveMemberButton from '@/components/members/archive-member-button'
 import EmailParentButton from '@/components/members/email-parent-button'
 import NewPackageButton from '@/components/members/new-package-button'
+import PackageStartButton from '@/components/members/package-start-button'
 import { asLocalDate } from '@/lib/dates'
-import { summarizeSessions, daysUntil } from '@/lib/sessions'
+import { summarizeSessions, daysUntil, windowStart } from '@/lib/sessions'
 import { packageWindow } from '@/lib/packages'
 
 const AVATAR_COLORS = [
@@ -90,6 +91,17 @@ export default async function MemberDetailPage({
   const sessions = summarizeSessions(member, packageWindow(activePackage), allAttendance.map(a => a.session.date))
   const { used: sessionsUsed, remaining: sessionsRemaining, pct: sessionsPct, allTime: attendedCount } = sessions
   const deadline = deadlineNote(sessions.expiresOn, sessionsRemaining)
+
+  // Check-ins that fall before the package's window and so are charged to
+  // nothing — a class attended before the parent got round to paying. Staff can
+  // pull the start date back over them; see PackageStartButton.
+  const activeWindow = packageWindow(activePackage)
+  const uncountedDates = activeWindow
+    ? allAttendance
+        .map(a => a.session.date)
+        .filter(d => d.getTime() < windowStart(activeWindow).getTime())
+        .map(d => d.toISOString().slice(0, 10))
+    : []
 
   const sessionStatus = sessionsRemaining === 0
     ? { color: 'text-red-500', bar: 'bg-red-400', bg: 'bg-red-50', msg: 'All sessions used — renewal needed.', msgColor: 'text-red-500' }
@@ -234,6 +246,14 @@ export default async function MemberDetailPage({
           )}
           {sessionStatus.msg && (
             <p className={`text-xs font-semibold mt-2 ${sessionStatus.msgColor}`}>{sessionStatus.msg}</p>
+          )}
+          {sessions.startDate && (
+            <PackageStartButton
+              memberId={id}
+              playerName={member.firstName}
+              startDate={sessions.startDate.toISOString()}
+              uncountedDates={uncountedDates}
+            />
           )}
           <NewPackageButton
             memberId={id}
