@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { openNewPackage, RESET_NOTE, utcToday } from '@/lib/packages'
+import { openNewPackage, packageWindow, RESET_NOTE, utcToday } from '@/lib/packages'
 import { summarizeSessions } from '@/lib/sessions'
 import { resolveMember } from '@/lib/name-match'
 import { resolveProgram, resolveSessionsTotal } from '@/lib/programs'
@@ -71,7 +71,7 @@ async function buildPlan(): Promise<ResetRow[]> {
 
   return members.map(m => {
     const active = m.packages[0] ?? null
-    const current = summarizeSessions(m, active, m.attendance.map(a => a.session.date))
+    const current = summarizeSessions(m, packageWindow(active), m.attendance.map(a => a.session.date))
 
     const reg = regByMember.get(m.id)
     const fromRegistration = reg ? resolveSessionsTotal(reg, config.packages) : null

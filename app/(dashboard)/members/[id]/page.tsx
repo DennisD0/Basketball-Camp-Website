@@ -6,6 +6,7 @@ import EmailParentButton from '@/components/members/email-parent-button'
 import NewPackageButton from '@/components/members/new-package-button'
 import { asLocalDate } from '@/lib/dates'
 import { summarizeSessions, daysUntil } from '@/lib/sessions'
+import { packageWindow } from '@/lib/packages'
 
 const AVATAR_COLORS = [
   'from-brand-navy to-brand-teal', 'from-purple-600 to-indigo-500',
@@ -86,7 +87,7 @@ export default async function MemberDetailPage({
   const totalPaid = payments.reduce((s, p) => s + Number(p.amount), 0)
   // All session arithmetic lives in lib/sessions.ts — never inline it here.
   const activePackage = packages.find(p => p.endDate === null) ?? null
-  const sessions = summarizeSessions(member, activePackage, allAttendance.map(a => a.session.date))
+  const sessions = summarizeSessions(member, packageWindow(activePackage), allAttendance.map(a => a.session.date))
   const { used: sessionsUsed, remaining: sessionsRemaining, pct: sessionsPct, allTime: attendedCount } = sessions
   const deadline = deadlineNote(sessions.expiresOn, sessionsRemaining)
 
@@ -189,6 +190,16 @@ export default async function MemberDetailPage({
           <p className="text-xs text-gray-500">
             {sessionsUsed} used this package · {attendedCount} all-time check-in{attendedCount !== 1 ? 's' : ''}
           </p>
+          {/* Paperwork lags the gym: a student pays and attends before the
+              registration is approved, so their package starts the day after a
+              session they have already used. Those check-ins are charged here
+              rather than to nothing — say so, or the count looks wrong. */}
+          {sessions.claimedBeforeStart > 0 && (
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              Includes {sessions.claimedBeforeStart} check-in{sessions.claimedBeforeStart !== 1 ? 's' : ''} from
+              {' '}just before the package started.
+            </p>
+          )}
           {sessions.startDate && (
             <div className="mt-3 pt-3 border-t border-black/5">
               <div className="flex items-baseline justify-between gap-3">

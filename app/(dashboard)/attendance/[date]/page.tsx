@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import TakeAttendance from '@/components/attendance/take-attendance'
 import { avatarColor } from '@/lib/avatar'
 import { summarizeSessions } from '@/lib/sessions'
+import { packageWindow } from '@/lib/packages'
 import { getRegistrationConfig } from '@/lib/get-registration-config'
 import { sportForClassLabel } from '@/lib/schedule'
 import { classesOnDate, classKeysForLabel, LEGACY_CLASS_KEY } from '@/lib/classes'
@@ -107,7 +108,7 @@ export default async function AttendanceDatePage({
   const summaryFor = (member: Attendee) =>
     summarizeSessions(
       member,
-      packageByMember.get(member.id) ?? null,
+      packageWindow(packageByMember.get(member.id) ?? null),
       datesByMember.get(member.id) ?? [],
     )
 

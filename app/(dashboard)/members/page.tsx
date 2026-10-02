@@ -2,6 +2,7 @@ import prisma from '@/lib/prisma'
 import MemberTable, { type MemberSessions } from '@/components/members/member-table'
 import Link from 'next/link'
 import { summarizeSessions } from '@/lib/sessions'
+import { packageWindow } from '@/lib/packages'
 import ResetSessionsButton from '@/components/members/reset-sessions-button'
 import CleanupSheetImportsButton from '@/components/members/cleanup-sheet-imports-button'
 
@@ -39,7 +40,7 @@ export default async function MembersPage() {
     sessions = Object.fromEntries(members.map(member => {
       const s = summarizeSessions(
         member,
-        packageByMember.get(member.id) ?? null,
+        packageWindow(packageByMember.get(member.id) ?? null),
         datesByMember.get(member.id) ?? [],
       )
       return [member.id, {

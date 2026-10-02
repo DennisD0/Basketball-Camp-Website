@@ -1,5 +1,8 @@
 import prisma from '@/lib/prisma'
-import { derivePackageWindow } from '@/lib/sessions'
+import { derivePackageWindow, type PackageWindow } from '@/lib/sessions'
+
+/** The stored columns `packageWindow` needs to classify a package row. */
+type PackageRow = Omit<PackageWindow, 'claimsEarlierCheckIns'> & { notes: string | null }
 
 /** Midnight UTC today — matches how Session.date is stored, so a session logged
  *  today falls inside a package started today. */
@@ -158,4 +161,31 @@ export async function openNewPackage(
 
     return pkg
   })
+}
+
+/**
+ * Packages that answer for the days just before they start.
+ *
+ * Only the package a student opens when they JOIN — through registration
+ * approval or manual entry. Nothing earlier exists, so a check-in in the days
+ * before it is charged to nothing unless this package takes it.
+ *
+ * An allowlist, not an exclusion list, and deliberately so. Every other kind of
+ * package is a statement about what came before and must not reach back past
+ * it: the sheet backfill reproduces a "Sessions Used" figure staff maintain, a
+ * reset exists precisely to stop old check-ins counting, and a coach-opened
+ * renewal promises that "past attendance is kept but no longer charged". A
+ * package kind added later gets the cautious answer by default.
+ */
+const JOINING_PACKAGE_NOTES: ReadonlySet<string> = new Set([REGISTRATION_NOTE, MANUAL_ENTRY_NOTE])
+
+/**
+ * Turn a stored package row into the window `summarizeSessions` measures
+ * against. The ONE place that decides whether a package reaches back over
+ * `PACKAGE_GRACE_DAYS`; every page must build its window through here, for the
+ * same reason every page must use `summarizeSessions`.
+ */
+export function packageWindow<T extends PackageRow>(pkg: T | null | undefined): (T & PackageWindow) | null {
+  if (!pkg) return null
+  return { ...pkg, claimsEarlierCheckIns: pkg.notes !== null && JOINING_PACKAGE_NOTES.has(pkg.notes) }
 }

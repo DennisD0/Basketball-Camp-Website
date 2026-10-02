@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import { isSheetClassLabel } from '@/lib/schedule'
 import { resolveMember } from '@/lib/name-match'
 import { summarizeSessions } from '@/lib/sessions'
+import { packageWindow } from '@/lib/packages'
 
 /**
  * Clear out the roster the spreadsheets left behind.
@@ -70,7 +71,7 @@ async function buildPlan(): Promise<CleanupRow[]> {
     const match = resolveMember(name, keepers)
     const paid = m.payments.reduce((sum, p) => sum + Number(p.amount), 0)
     const present = m.attendance.filter(a => a.status === 'PRESENT')
-    const summary = summarizeSessions(m, m.packages[0] ?? null, present.map(a => a.session.date))
+    const summary = summarizeSessions(m, packageWindow(m.packages[0] ?? null), present.map(a => a.session.date))
 
     return {
       memberId: m.id,

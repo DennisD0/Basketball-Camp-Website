@@ -16,6 +16,15 @@ export type PackageWindow = {
   endDate: Date | null
   carriedUsed: number
   packageType: string | null
+  /**
+   * Does this package also answer for the few days BEFORE it starts?
+   *
+   * True for the package a student opens when they join — see
+   * `packageWindow` in lib/packages.ts, which is the only thing that
+   * should decide this. Required rather than optional so a new caller cannot
+   * quietly default it and show a different number than every other page.
+   */
+  claimsEarlierCheckIns: boolean
 }
 
 export type LegacyCounts = {
@@ -37,6 +46,12 @@ export type SessionSummary = {
   startDate: Date | null
   /** Last day the package's sessions can be used. Null when there is no window. */
   expiresOn: Date | null
+  /**
+   * Check-ins counted from before the package's start date, under
+   * `PACKAGE_GRACE_DAYS`. Surfaced so a coach can see why the number moved
+   * rather than wondering where the extra session went.
+   */
+  claimedBeforeStart: number
 }
 
 /**
@@ -86,9 +101,39 @@ function pctOf(used: number, total: number): number {
   return Math.min(Math.round((used / Math.max(total, 1)) * 100), 100)
 }
 
-/** Check-ins that fall inside a package's window: on/after startDate, before endDate. */
+/**
+ * How many days before a package starts a check-in can still be charged to it.
+ *
+ * Paperwork lags the gym. A parent pays on the Friday, the class is that same
+ * evening, and the registration is approved on the Saturday — so the student's
+ * package starts the day AFTER the session they have already attended, and that
+ * session is charged to nothing at all. A coach sees "1 used, 2 all-time
+ * check-ins" and a counter that is one session too generous.
+ *
+ * Two weeks is drawn to cover a slow week of admin without reaching back into a
+ * different chapter of the student's history: check-ins older than this belong
+ * to whatever they were enrolled in before, including the ones a merged
+ * duplicate profile brings with it.
+ */
+export const PACKAGE_GRACE_DAYS = 14
+
+/**
+ * The earliest check-in date a package answers for.
+ *
+ * Its start date, except for the package a student opens when they join: that
+ * one reaches back over `PACKAGE_GRACE_DAYS`, because nothing earlier exists to
+ * charge those sessions to.
+ */
+export function windowStart(pkg: PackageWindow): Date {
+  if (!pkg.claimsEarlierCheckIns) return pkg.startDate
+  const start = new Date(pkg.startDate.getTime())
+  start.setUTCDate(start.getUTCDate() - PACKAGE_GRACE_DAYS)
+  return start
+}
+
+/** Check-ins that fall inside a package's window: on/after its start, before endDate. */
 export function sessionsInWindow(pkg: PackageWindow, attendanceDates: Date[]): number {
-  const start = pkg.startDate.getTime()
+  const start = windowStart(pkg).getTime()
   const end = pkg.endDate ? pkg.endDate.getTime() : Infinity
   return attendanceDates.filter(d => {
     const t = d.getTime()
@@ -111,6 +156,10 @@ export function summarizeSessions(
     // write-back, and renewing resets the count by opening a new window.
     const total = activePackage.sessionsTotal
     const used = activePackage.carriedUsed + sessionsInWindow(activePackage, attendanceDates)
+    const start = activePackage.startDate.getTime()
+    const claimedBeforeStart = attendanceDates.filter(
+      d => d.getTime() >= windowStart(activePackage).getTime() && d.getTime() < start,
+    ).length
     return {
       total,
       used,
@@ -121,6 +170,7 @@ export function summarizeSessions(
       packageType: activePackage.packageType,
       startDate: activePackage.startDate,
       expiresOn: packageExpiry(activePackage.startDate, total),
+      claimedBeforeStart,
     }
   }
 
@@ -138,6 +188,7 @@ export function summarizeSessions(
     // No package row means no start date, and a deadline counted from a date we
     // do not have would be fiction.
     expiresOn: null,
+    claimedBeforeStart: 0,
   }
 }
 
