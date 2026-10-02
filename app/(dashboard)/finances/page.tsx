@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma'
+import { describeDbError } from '@/lib/db-error'
 import FinanceDashboard from '@/components/finances/finance-dashboard'
 import EmptyState from '@/components/ui/empty-state'
 
@@ -19,8 +20,10 @@ export default async function FinancesPage() {
       prisma.member.count({ where: { status: 'ACTIVE' } }),
       prisma.expense.findMany({ select: { id: true, amount: true, description: true, category: true, date: true, paidBy: true, sport: true }, orderBy: { date: 'desc' } }),
     ])
-  } catch {
-    return <EmptyState message="Could not reach the database. Add your DATABASE_URL in Vercel environment variables and redeploy." />
+  } catch (err) {
+    const failure = describeDbError(err)
+    console.error('[finances/page]', err)
+    return <EmptyState title="Could not load this page" message={failure.message} hint={failure.hint} />
   }
 
   // Revenue, expense totals and net profit are deliberately NOT computed here.

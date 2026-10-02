@@ -106,7 +106,7 @@ export default function ResetSessionsButton() {
     <>
       <button
         onClick={load}
-        className="text-sm font-medium text-gray-500 hover:text-brand-navy border border-gray-200 px-4 py-2 rounded-full hover:bg-gray-50 active:scale-95 transition-all"
+        className="flex-1 sm:flex-none min-h-[44px] px-4 text-sm font-medium text-gray-500 hover:text-brand-navy border border-gray-200 rounded-full hover:bg-gray-50 active:scale-95 transition-all whitespace-nowrap"
       >
         Reset sessions
       </button>

@@ -47,6 +47,15 @@ function TrashIcon() {
   )
 }
 
+function PencilIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  )
+}
+
 function SearchIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -69,7 +78,7 @@ function SessionLine({ s }: { s: MemberSessions }) {
   const soon = days !== null && days >= 0 && days <= 14
 
   return (
-    <p className="text-[11px] mt-1 truncate">
+    <p className="text-[11px] mt-1">
       <span className={`font-semibold ${
         s.remaining === 0 ? 'text-red-500' : s.remaining <= 2 ? 'text-orange-500' : 'text-brand-teal'
       }`}>
@@ -107,55 +116,70 @@ function MemberCard({
   return (
     <div
       onClick={() => router.push(`/members/${m.id}`)}
-      className="group bg-white rounded-2xl shadow-sm ring-1 ring-black/5 p-4 flex items-center gap-4 hover:shadow-md hover:ring-brand-teal/30 active:scale-[0.99] transition-all duration-150 cursor-pointer"
+      className="group bg-white rounded-2xl shadow-sm ring-1 ring-black/5 p-3 sm:p-4 hover:shadow-md hover:ring-brand-teal/30 active:scale-[0.99] transition-all duration-150 cursor-pointer"
     >
-      {/* Avatar */}
-      <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center font-bold text-sm text-white flex-shrink-0 shadow-sm`}>
-        {initials}
-      </div>
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <p className="font-condensed font-bold text-brand-navy text-base leading-tight truncate">
-          {m.firstName} {m.lastName}
-        </p>
-        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-          {m.teamAssignment && (
-            <span className="text-[10px] font-bold bg-brand-navy/8 text-brand-navy px-2 py-0.5 rounded-full uppercase tracking-wide">
-              {m.teamAssignment}
-            </span>
-          )}
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${
-            paid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-          }`}>
-            {paid ? 'Paid' : 'Unpaid'}
-          </span>
+      {/* Top row: who they are, and what you can do to them. On a phone the
+          name and the two action buttons are all that competes for the width. */}
+      <div className="flex items-start gap-3 sm:gap-4">
+        <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center font-bold text-sm text-white flex-shrink-0 shadow-sm`}>
+          {initials}
         </div>
-        {sessions && <SessionLine s={sessions} />}
-        {m.guardianName && (
-          <p className="text-[11px] text-gray-400 mt-1 truncate">{m.guardianName}</p>
-        )}
+
+        <div className="flex-1 min-w-0">
+          <p className="font-condensed font-bold text-brand-navy text-base leading-tight truncate">
+            {m.firstName} {m.lastName}
+          </p>
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            {m.teamAssignment && (
+              <span className="text-[10px] font-bold bg-brand-navy/8 text-brand-navy px-2 py-0.5 rounded-full uppercase tracking-wide max-w-full truncate">
+                {m.teamAssignment}
+              </span>
+            )}
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${
+              paid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+            }`}>
+              {paid ? 'Paid' : 'Unpaid'}
+            </span>
+          </div>
+        </div>
+
+        {/* Actions. The label collapses to a pencil on a phone — the words cost
+            more width than the whole session line needs. Both stay 44px, the
+            smallest thing a thumb can reliably hit. */}
+        <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 -mr-1 sm:mr-0">
+          <button
+            onClick={e => { e.stopPropagation(); router.push(`/members/${m.id}/edit`) }}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[11px] font-semibold text-gray-400 hover:text-brand-navy sm:px-2 rounded-xl hover:bg-gray-100 transition-colors"
+            aria-label={`Edit ${m.firstName} ${m.lastName}`}
+          >
+            <span className="hidden sm:inline">Edit</span>
+            <span className="sm:hidden"><PencilIcon /></span>
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); onDeleteClick() }}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+            aria-label={`Delete ${m.firstName} ${m.lastName}`}
+            title="Delete member"
+          >
+            <TrashIcon />
+          </button>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="hidden sm:block w-4 h-4 text-gray-300 flex-shrink-0">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <button
-          onClick={e => { e.stopPropagation(); router.push(`/members/${m.id}/edit`) }}
-          className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[11px] font-semibold text-gray-400 hover:text-brand-navy px-2 rounded-xl hover:bg-gray-100 transition-colors"
-        >
-          Edit
-        </button>
-        <button
-          onClick={e => { e.stopPropagation(); onDeleteClick() }}
-          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-          title="Delete member"
-        >
-          <TrashIcon />
-        </button>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-gray-300 flex-shrink-0">
-          <polyline points="9 18 15 12 9 6" />
-        </svg>
-      </div>
+      {/* Sessions and guardian get the full width of the card. Squeezed into the
+          column above they were truncated on a phone — which hid the one number
+          a coach opens this page to read. Indented to the avatar on desktop. */}
+      {(sessions || m.guardianName) && (
+        <div className="mt-1.5 sm:mt-1 sm:pl-16">
+          {sessions && <SessionLine s={sessions} />}
+          {m.guardianName && (
+            <p className="text-[11px] text-gray-400 mt-1 truncate">{m.guardianName}</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }

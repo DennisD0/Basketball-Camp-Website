@@ -156,7 +156,7 @@ export default function Nav() {
           </div>
           <button
             onClick={handleSignOut}
-            className="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-white/10 text-white/90 active:bg-white/20 transition-all"
+            className="min-h-[44px] px-3.5 flex items-center text-[11px] font-medium rounded-lg bg-white/10 text-white/90 active:bg-white/20 transition-all"
           >
             Sign out
           </button>

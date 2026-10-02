@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma'
+import { describeDbError } from '@/lib/db-error'
 import { getRegistrationConfig } from '@/lib/get-registration-config'
 import RegistrationList from '@/components/registrations/registration-list'
 import AutoRefresh from '@/components/auto-refresh'
@@ -12,8 +13,10 @@ export default async function RegistrationsPage() {
     registrations = await prisma.registration.findMany({
       orderBy: { createdAt: 'desc' },
     })
-  } catch {
-    return <EmptyState message="Could not reach the database. Add your DATABASE_URL in Vercel environment variables and redeploy." />
+  } catch (err) {
+    const failure = describeDbError(err)
+    console.error('[registrations/page]', err)
+    return <EmptyState title="Could not load this page" message={failure.message} hint={failure.hint} />
   }
 
   // The list is a client component, so the packages it needs to name each

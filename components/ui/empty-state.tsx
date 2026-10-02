@@ -1,4 +1,13 @@
-export default function EmptyState({ message }: { message: string }) {
+export default function EmptyState({
+  message,
+  title = 'No data yet',
+  hint = null,
+}: {
+  message: string
+  title?: string
+  /** What the person who can fix it should do. See lib/db-error.ts. */
+  hint?: string | null
+}) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6">
       <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
@@ -8,8 +17,9 @@ export default function EmptyState({ message }: { message: string }) {
           <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3" />
         </svg>
       </div>
-      <h2 className="font-condensed font-bold text-xl text-brand-navy mb-1">No data yet</h2>
-      <p className="text-sm text-gray-400 max-w-sm">{message}</p>
+      <h2 className="font-condensed font-bold text-xl text-brand-navy mb-1">{title}</h2>
+      <p className="text-sm text-gray-500 max-w-sm">{message}</p>
+      {hint && <p className="text-xs text-gray-400 max-w-sm mt-2">{hint}</p>}
     </div>
   )
 }

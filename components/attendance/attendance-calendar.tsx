@@ -16,16 +16,29 @@ export default function AttendanceCalendar({ initialYear, initialMonth }: Props)
   // register are separate sessions — so a count, not just a flag.
   const [classesByDate, setClassesByDate] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
-  const [dbError, setDbError] = useState(false)
+  // What went wrong, in words, rather than a boolean that could only ever say
+  // "Database not connected" — which was wrong the one time it mattered.
+  const [failure, setFailure] = useState<{ message: string; hint: string | null } | null>(null)
 
   useEffect(() => {
     setLoading(true)
-    setDbError(false)
+    setFailure(null)
     const m = String(month).padStart(2, '0')
     fetch(`/api/attendance?month=${year}-${m}`)
-      .then(r => { if (!r.ok) throw new Error('db'); return r.json() })
+      .then(async r => {
+        const data = await r.json().catch(() => null)
+        // The API explains its own failures; fall back only when it could not.
+        if (!r.ok) throw Object.assign(new Error('db'), { failure: data })
+        return data
+      })
       .then(data => { setClassesByDate(data.classesByDate ?? {}); setLoading(false) })
-      .catch(() => { setDbError(true); setLoading(false) })
+      .catch((err: { failure?: { message?: string; hint?: string | null } }) => {
+        setFailure({
+          message: err?.failure?.message ?? 'Could not load the calendar.',
+          hint:    err?.failure?.hint ?? 'The site could not reach the server. Check your connection and try again.',
+        })
+        setLoading(false)
+      })
   }, [year, month])
 
   function prevMonth() {
@@ -70,7 +83,7 @@ export default function AttendanceCalendar({ initialYear, initialMonth }: Props)
         </button>
         <div className="text-center">
           <h2 className="font-condensed font-bold text-xl text-brand-navy tracking-wide uppercase">{monthName} {year}</h2>
-          {!loading && !dbError && (
+          {!loading && !failure && (
             <p className="text-xs text-gray-400 mt-0.5">
               {sessionCount === 0
                 ? 'No sessions recorded'
@@ -104,12 +117,13 @@ export default function AttendanceCalendar({ initialYear, initialMonth }: Props)
               <div key={i} className="aspect-square rounded-xl skeleton opacity-40" />
             ))}
           </div>
-        ) : dbError ? (
-          <div className="h-48 flex flex-col items-center justify-center gap-2 text-gray-400">
+        ) : failure ? (
+          <div className="min-h-[12rem] flex flex-col items-center justify-center gap-2 text-center px-4 py-8">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-8 h-8 text-gray-300">
               <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
-            <p className="text-sm">Database not connected</p>
+            <p className="text-sm font-medium text-gray-600 max-w-xs">{failure.message}</p>
+            {failure.hint && <p className="text-xs text-gray-400 max-w-xs">{failure.hint}</p>}
           </div>
         ) : (
           <div className="grid grid-cols-7 gap-1">

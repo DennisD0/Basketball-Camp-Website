@@ -1,4 +1,6 @@
 import prisma from '@/lib/prisma'
+import { describeDbError } from '@/lib/db-error'
+import EmptyState from '@/components/ui/empty-state'
 import MemberTable, { type MemberSessions } from '@/components/members/member-table'
 import Link from 'next/link'
 import { summarizeSessions } from '@/lib/sessions'
@@ -53,45 +55,43 @@ export default async function MembersPage() {
         expiresOn: s.expiresOn?.toISOString() ?? null,
       }]
     }))
-  } catch {
-    return <EmptyState message="Could not reach the database. Add your DATABASE_URL in Vercel environment variables and redeploy." />
+  } catch (err) {
+    const failure = describeDbError(err)
+    console.error('[members/page]', err)
+    return <EmptyState title="Could not load this page" message={failure.message} hint={failure.hint} />
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="font-condensed font-bold text-2xl text-brand-navy tracking-wide">Members</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{members.length} active member{members.length !== 1 ? 's' : ''}</p>
+      {/* Three buttons and a title do not fit across a phone. Add Member stays
+          on the title row because it is the one a coach actually reaches for;
+          the two bulk tools drop to their own row underneath and rejoin the
+          line once there is room for them. */}
+      <div className="mb-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="font-condensed font-bold text-2xl text-brand-navy tracking-wide">Members</h1>
+            <p className="text-sm text-gray-400 mt-0.5">{members.length} active member{members.length !== 1 ? 's' : ''}</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="hidden sm:flex items-center gap-2">
+              <CleanupSheetImportsButton />
+              <ResetSessionsButton />
+            </div>
+            <Link
+              href="/members/new"
+              className="bg-brand-navy text-white px-4 py-2.5 rounded-full text-sm font-medium hover:bg-brand-navy/90 active:scale-95 transition-all whitespace-nowrap min-h-[44px] flex items-center"
+            >
+              + Add<span className="hidden sm:inline">&nbsp;Member</span>
+            </Link>
+          </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex sm:hidden items-center gap-2 mt-3">
           <CleanupSheetImportsButton />
           <ResetSessionsButton />
-          <Link
-            href="/members/new"
-            className="bg-brand-navy text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-brand-navy/90 active:scale-95 transition-all"
-          >
-            + Add Member
-          </Link>
         </div>
       </div>
       <MemberTable members={members} paidMemberIds={Array.from(paidIds)} sessions={sessions} />
-    </div>
-  )
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6">
-      <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-8 h-8 text-gray-300">
-          <ellipse cx="12" cy="5" rx="9" ry="3" />
-          <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" />
-          <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3" />
-        </svg>
-      </div>
-      <h2 className="font-condensed font-bold text-xl text-brand-navy mb-1">No data yet</h2>
-      <p className="text-sm text-gray-400 max-w-sm">{message}</p>
     </div>
   )
 }

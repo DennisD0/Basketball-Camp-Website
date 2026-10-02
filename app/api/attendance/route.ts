@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 import { LEGACY_CLASS_KEY } from '@/lib/classes'
+import { describeDbError } from '@/lib/db-error'
 
 async function requireAuth() {
   const cookieStore = await cookies()
@@ -65,7 +66,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Provide month or date param' }, { status: 400 })
   } catch (err) {
     console.error('[attendance/get]', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    // The client renders `message`/`hint`; `error` stays for the server log and
+    // for anyone reading the response by hand.
+    return NextResponse.json({ error: String(err), ...describeDbError(err) }, { status: 500 })
   }
 }
 
@@ -117,7 +120,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ sessionsDeleted: sessionIds.length, attendanceDeleted })
   } catch (err) {
     console.error('[attendance/delete]', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: String(err), ...describeDbError(err) }, { status: 500 })
   }
 }
 
@@ -191,6 +194,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, sessionId: session.id, classKey })
   } catch (err) {
     console.error('[attendance/post]', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: String(err), ...describeDbError(err) }, { status: 500 })
   }
 }
