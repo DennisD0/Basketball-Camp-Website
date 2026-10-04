@@ -6,22 +6,42 @@ import { SPORTS, SPORT_LABELS, guessSportFromTeam } from '@/lib/sports'
 
 type Member = { id: string; firstName: string; lastName: string; teamAssignment: string | null }
 
-export default function PaymentForm({ members }: { members: Member[] }) {
+export default function PaymentForm({
+  members,
+  initialMemberId = null,
+  returnTo = '/finances',
+}: {
+  members: Member[]
+  /** Set when the form was opened from a student's profile. See the page. */
+  initialMemberId?: string | null
+  /** Where Cancel and a successful save go back to. */
+  returnTo?: string
+}) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const initialMember = initialMemberId ? members.find(m => m.id === initialMemberId) ?? null : null
+  const initialSport = guessSportFromTeam(initialMember?.teamAssignment) ?? ''
+
   const [form, setForm] = useState({
-    memberId: '',
+    memberId: initialMember?.id ?? '',
     amount: '',
     method: 'CASH',
     date: new Date().toISOString().split('T')[0],
     notes: '',
-    sport: '',
+    sport: initialSport,
   })
   // True when the sport below was filled in from the member's class label
   // rather than chosen. Shown, not hidden: a student can be enrolled in both
   // sports, so the guess is a starting point staff confirm.
-  const [sportGuessed, setSportGuessed] = useState(false)
+  const [sportGuessed, setSportGuessed] = useState(Boolean(initialSport))
+
+  // Arriving from a student's profile, the student is already decided — show
+  // who, not a roster to scroll. Still changeable: landing on the wrong student
+  // must never be a dead end that needs the back button.
+  const [picking, setPicking] = useState(initialMember === null)
+  const chosen = members.find(m => m.id === form.memberId) ?? null
 
   function selectMember(memberId: string) {
     const member = members.find(m => m.id === memberId)
@@ -48,7 +68,7 @@ export default function PaymentForm({ members }: { members: Member[] }) {
       return
     }
 
-    router.push('/finances')
+    router.push(returnTo)
     router.refresh()
   }
 
@@ -61,19 +81,39 @@ export default function PaymentForm({ members }: { members: Member[] }) {
       <div className="space-y-5">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Member</label>
-          <select
-            required
-            value={form.memberId}
-            onChange={e => selectMember(e.target.value)}
-            className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-teal/40 bg-white"
-          >
-            <option value="">Select member…</option>
-            {members.map(m => (
-              <option key={m.id} value={m.id}>
-                {m.firstName} {m.lastName} {m.teamAssignment ? `(${m.teamAssignment})` : ''}
-              </option>
-            ))}
-          </select>
+          {!picking && chosen ? (
+            <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border border-gray-200 bg-gray-50">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-800 truncate">
+                  {chosen.firstName} {chosen.lastName}
+                </p>
+                {chosen.teamAssignment && (
+                  <p className="text-xs text-gray-500 truncate">{chosen.teamAssignment}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setPicking(true)}
+                className="flex-shrink-0 min-h-[44px] px-2 text-xs font-semibold text-brand-teal hover:text-brand-teal/80 transition-colors"
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <select
+              required
+              value={form.memberId}
+              onChange={e => selectMember(e.target.value)}
+              className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-teal/40 bg-white"
+            >
+              <option value="">Select member…</option>
+              {members.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.firstName} {m.lastName} {m.teamAssignment ? `(${m.teamAssignment})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div>
@@ -167,7 +207,7 @@ export default function PaymentForm({ members }: { members: Member[] }) {
             {loading ? 'Saving…' : 'Record Payment'}
           </button>
           <a
-            href="/finances"
+            href={returnTo}
             className="px-5 py-2.5 rounded-full text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all"
           >
             Cancel
