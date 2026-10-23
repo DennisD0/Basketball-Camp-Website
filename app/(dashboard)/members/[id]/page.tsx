@@ -103,6 +103,12 @@ export default async function MemberDetailPage({
         .map(d => d.toISOString().slice(0, 10))
     : []
 
+  // The history list restarts with each package; earlier check-ins stay in the calendar.
+  const packageAttendance = activeWindow
+    ? allAttendance.filter(a => a.session.date.getTime() >= windowStart(activeWindow).getTime())
+    : allAttendance
+  const earlierCount = allAttendance.length - packageAttendance.length
+
   const sessionStatus = sessionsRemaining === 0
     ? { color: 'text-red-500', bar: 'bg-red-400', bg: 'bg-red-50', msg: 'All sessions used — renewal needed.', msgColor: 'text-red-500' }
     : sessionsRemaining <= 2
@@ -336,12 +342,21 @@ export default async function MemberDetailPage({
 
         {/* Attendance history */}
         <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5 sm:col-span-2">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">All Attendance Dates</p>
-          {allAttendance.length === 0 ? (
-            <p className="text-sm text-gray-400 py-4 text-center">No sessions attended yet.</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              {earlierCount > 0 ? 'Attendance — Current Package' : 'All Attendance Dates'}
+            </p>
+            {earlierCount > 0 && (
+              <span className="text-[10px] text-gray-400">
+                {earlierCount} earlier check-in{earlierCount !== 1 ? 's' : ''} from previous packages
+              </span>
+            )}
+          </div>
+          {packageAttendance.length === 0 ? (
+            <p className="text-sm text-gray-400 py-4 text-center">No sessions attended yet in this package.</p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {allAttendance.map((a, i) => {
+              {packageAttendance.map((a, i) => {
                 const label = asLocalDate(a.session.date).toLocaleDateString('en-US', {
                   weekday: 'short', month: 'short', day: 'numeric',
                 })
