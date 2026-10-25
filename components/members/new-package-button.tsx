@@ -25,7 +25,16 @@ export default function NewPackageButton({
 
   const [preset, setPreset] = useState(() => PRESETS.find(p => p.sessions === currentTotal) ?? DEFAULT_PRESET)
   const [custom, setCustom] = useState('')
-  const [startDate, setStartDate] = useState(todayISO)
+  // Renewals are usually taken at the end of the last class of the old package,
+  // so a check-in dated today belongs to the OLD package: default to the day after it.
+  const [startDate, setStartDate] = useState(() => {
+    const today = todayISO()
+    const latest = checkInDates.reduce((m, d) => (d > m ? d : m), '')
+    if (latest < today) return today
+    const d = new Date(latest + 'T00:00:00Z')
+    d.setUTCDate(d.getUTCDate() + 1)
+    return d.toISOString().slice(0, 10)
+  })
 
   const sessionsTotal = custom.trim() ? parseInt(custom, 10) : preset.sessions
   const valid = Number.isInteger(sessionsTotal) && sessionsTotal >= 1 && sessionsTotal <= 100
